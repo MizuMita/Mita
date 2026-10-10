@@ -1373,6 +1373,7 @@
   "on quitte le monde en ligne : retour a l'ecran titre (ta partie solo n'a pas ete touchee)"
   (let ((w *online-world*))
     (set! (-> w active) #f)
+    (set! *ow-keep-tasks-on-death* #f)
     (set! (-> w starting) 0)
     (set! (-> w frozen) #f)
     (set! (-> *pc-settings* cheats) (the-as pc-cheats (-> w cheats-saved)))
@@ -4282,6 +4283,8 @@
          (ext *online-ext*)
          (alive (online-companion-alive?))
          )
+    ;; monde en ligne : une mort ne rouvre pas les missions de l'histoire
+    (set! *ow-keep-tasks-on-death* (-> w active))
     (ow-cheats-detect!)
     (ow-read-keys!)
     (ow-kb-tick!)

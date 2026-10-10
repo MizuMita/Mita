@@ -1048,6 +1048,10 @@
   0
   )
 
+;; JAK 2 EN LIGNE : dans le monde en ligne, l'histoire est terminee d'office (ow-world-close-story!).
+;; Une mort ne doit pas rouvrir ces missions (elles coupaient le trafic : plus de PNJ ni de vehicules).
+(define *ow-keep-tasks-on-death* #f)
+
 (defun task-node-reset ((arg0 symbol))
   (let ((game-nodes (-> *game-info* sub-task-list)))
     (dotimes (i (-> game-nodes length))
@@ -1061,7 +1065,8 @@
                    )
                )
               (('life)
-               (if (and (not (task-complete? *game-info* (-> node task)))
+               (if (and (not *ow-keep-tasks-on-death*)
+                        (not (task-complete? *game-info* (-> node task)))
                         (not (logtest? (-> node flags) (game-task-node-flag save-on-life)))
                         )
                    (logclear! (-> node flags) (game-task-node-flag closed))
