@@ -3112,6 +3112,47 @@
   (none)
   )
 
+;; apres une mort en session : le jeu coupe le son (sfx, ambiance, dialogues, musique) et
+;; l'apparition des acteurs pendant la reapparition. Si quelque chose les laisse coupes, on les
+;; remet 3 s apres la reapparition (ce que fait normalement la sortie de target-continue).
+(define *online-respawn-pending* #f)
+(define *online-respawn-time* (the-as time-frame 0))
+
+(defun online-respawn-fix! ()
+  (let ((t *target*))
+    (cond
+      ((not t)
+       )
+      ((or (focus-test? t dead)
+           (= (-> t state name) 'target-death)
+           (= (-> t state name) 'target-continue)
+           )
+       (set! *online-respawn-pending* #t)
+       (set! *online-respawn-time* (online-now))
+       )
+      ((and *online-respawn-pending*
+            (< (seconds 3) (- (online-now) *online-respawn-time*))
+            (= *master-mode* 'game)
+            (not (movie?))
+            )
+       (set! *online-respawn-pending* #f)
+       (if (not *spawn-actors*)
+           (set! *spawn-actors* #t)
+           )
+       (remove-setting *setting-control* t 'sfx-volume)
+       (remove-setting *setting-control* t 'ambient-volume)
+       (remove-setting *setting-control* t 'dialog-volume)
+       (remove-setting *setting-control* t 'music-volume)
+       (remove-setting *setting-control* t 'music)
+       (apply-settings *setting-control*)
+       (sound-group-continue (the-as sound-group #xffffffff))
+       (format 0 "[jak2-online] reapparition : son et acteurs remis~%")
+       )
+      )
+    )
+  (none)
+  )
+
 (defun online-track-death! ()
   "signale sa mort (et le tueur eventuel) au reste de la session"
   (let* ((rt *online*)
@@ -3478,9 +3519,13 @@
   (when (!= on *online-live-menu*)
     (set! *online-live-menu* on)
     (apply-settings *setting-control*)
+    ;; on ne coupe le son que si le jeu est encore en pause / menu : si le menu s'est ferme tout
+    ;; seul (mort, cinematique), le jeu est deja revenu en mode 'game et ne relancerait plus le son
     (if on
         (sound-group-continue (the-as sound-group #xffffffff))
-        (sound-group-pause (the-as sound-group #xffffffff))
+        (if (!= *master-mode* 'game)
+            (sound-group-pause (the-as sound-group #xffffffff))
+            )
         )
     )
   (none)
@@ -3878,6 +3923,7 @@
       (cond
         (in-session
          (online-track-death!)
+         (online-respawn-fix!)
          (online-track-vehicle!)
          (online-process-in-events!)
          (if (and *target* (not (paused?)))

@@ -2546,6 +2546,13 @@
     )
   )
 
+(defun ow-ride-grabbed? ((t target))
+  "Jak est (ou va etre) dans l'etat target-grab"
+  (or (= (-> t state name) 'target-grab)
+      (and (-> t next-state) (= (-> t next-state name) 'target-grab))
+      )
+  )
+
 (defun ow-ride-update! ()
   "monter a plusieurs dans un vehicule : TRIANGLE pres du vehicule d'un autre joueur"
   (let ((w *online-world*)
@@ -2558,7 +2565,7 @@
       ((nonzero? (-> w ride-with))
        (let ((pos (ow-ride-driver-pos (-> w ride-with))))
          (cond
-           ((or (not t) (not pos) (focus-test? t dead) (!= (-> t state name) 'target-grab) (not (-> w active))
+           ((or (not t) (not pos) (focus-test? t dead) (not (ow-ride-grabbed? t)) (not (-> w active))
                 (and (or (cpad-pressed? 0 triangle) *ow-ride-press*) (not (-> w tab-open)) (not (-> w shop-open)) (not (-> w chat-open)) (not *progress-process*))
                 )
             (ow-ride-stop! pos)
@@ -2598,7 +2605,7 @@
       ((and t (-> w active) (not (-> w tab-open)) (not (-> w shop-open)) (not (-> w chat-open)) (not *progress-process*)
             (not (-> w in-shop-zone)) (not (focus-test? t dead pilot board flut grabbed hit)) (not (movie?)))
        (let ((best (the-as uint 0))
-             (bd (meters 5.0))
+             (bd (meters 7.0))
              )
          (dotimes (i ONLINE_MAX_PUPPETS)
            (let ((rs (-> *online-shm* remote i)))
@@ -2622,7 +2629,10 @@
          (when (nonzero? best)
            (set! (-> w ride-near) best)
            (when (or (cpad-pressed? 0 triangle) *ow-ride-press*)
-             (when (send-event t 'change-mode 'grab #t)
+             ;; jak 2 : la reponse de l'evenement n'est pas fiable (le changement d'etat peut
+             ;; etre differe) : on regarde l'etat demande plutot que la valeur renvoyee
+             (send-event t 'change-mode 'grab #t)
+             (when (ow-ride-grabbed? t)
                (set! (-> w ride-with) best)
                (set! *ow-ride-anim* #f)
                (sound-play "menu-pick")
