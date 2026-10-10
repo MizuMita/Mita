@@ -1,0 +1,67 @@
+;;-*-Lisp-*-
+(in-package goal)
+
+;; name: online-maps.gc
+;; dgos: GAME
+;;
+;; JAK 2 EN LIGNE - cartes du mod (parcours, maisons, circuit).
+;;
+;; La version Jak 3 ajoute des niveaux faits a partir de modeles (.glb) qui ne sont pas dans
+;; le depot : dans Jak 2 en ligne il n'y a donc pas de carte du mod. Ces fonctions gardent
+;; les memes noms (le reste du code les appelle) et disent simplement "aucune carte".
+
+(define *ow-veh-free* #f) ;; vehicules libres (course auto de la version Jak 3)
+
+(defun ow-map-name ((i int))
+  ""
+  )
+
+(defun ow-map-index-of ((lev string))
+  -1
+  )
+
+(defun ow-map-current ()
+  "carte du mod ou se trouve Jak (-1 : aucune)"
+  -1
+  )
+
+(defun ow-map-inside? ()
+  #f
+  )
+
+(defun ow-evk-map? ((k int))
+  "cet evenement se joue-t-il sur une carte du mod ?"
+  #f
+  )
+
+(defun ow-map-goto! ((i int))
+  (none)
+  )
+
+(defun ow-map-join! ()
+  (none)
+  )
+
+(defun ow-map-leave! ()
+  (none)
+  )
+
+(defun ow-maps-tick! ()
+  (none)
+  )
+
+(defun ow-map-draw-banner! ((y float))
+  (none)
+  )
+
+(defun ow-maisons-test! ((arg int))
+  (none)
+  )
+
+(defun ow-mer-test! ((arg int))
+  (none)
+  )
+
+(defun online-maps-test! ((arg int))
+  (none)
+  )

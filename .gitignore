@@ -1,0 +1,7 @@
+﻿iso_data/
+decompiler_out/
+out/
+build/
+*.iso
+*.CGO
+*.DGO
