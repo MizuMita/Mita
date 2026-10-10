@@ -3961,9 +3961,15 @@ namespace Jak2Online
             btnPlay = new Button();
             btnPlay.Text = W("JOUER A JAK 2");
             btnPlay.Font = new Font(Font, FontStyle.Bold);
-            btnPlay.SetBounds(260, y - 1, 370, 30);
+            btnPlay.SetBounds(260, y - 1, 330, 30);
             btnPlay.Click += delegate { LaunchGame(); };
             Controls.Add(btnPlay);
+            btnPickGame = new Button();
+            btnPickGame.Text = "...";
+            btnPickGame.SetBounds(596, y - 1, 34, 30);
+            btnPickGame.Click += delegate { PickGame(); };
+            Controls.Add(btnPickGame);
+            new ToolTip().SetToolTip(btnPickGame, W("Choisir le jeu (gk.exe du mod Jak 2 Online)"));
             btnBot.SetBounds(510, y - 1, 120, 30);
             y += 38;
             // joueur 2 local : 2e fenetre du jeu avec une 2e manette (comme un ecran partage)
@@ -4049,10 +4055,16 @@ namespace Jak2Online
                 }
                 catch (Exception) { }
             };
+            ResolveGame();
             if (bridgeOverride != null) client.BridgeDir = bridgeOverride;
+            else if (gameDir != null)
+            {
+                string br = Path.Combine(gameDir, "data", "online", "bridge");
+                try { Directory.CreateDirectory(br); } catch (Exception) { }
+                client.BridgeDir = br;
+            }
+            QueueLog(gameDir != null ? W("Jeu trouve : ") + gameDir : W("Jeu introuvable : bouton ... a cote de JOUER pour choisir gk.exe"));
             QueueLog(W("Dossier d'echange avec le jeu : ") + client.BridgeDir);
-            if (bridgeOverride == null && !Directory.Exists(Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "..", "goal_src")))
-                QueueLog(W("ATTENTION : Jak2Online.exe doit rester dans le dossier data\\online du mod (sinon le jeu ne le voit pas)."));
             client.Start();
             UpdateModeUi();
 
@@ -4140,18 +4152,103 @@ namespace Jak2Online
 
         string W(string fr) { return Lang.Win(UiLang, fr); }
 
-        Button btnPlay;
+        Button btnPlay, btnPickGame;
+        string gameDir;      // dossier du mod (gk.exe + data)
+        string gameCfg;      // dossier de reglages du launcher OpenGOAL pour ce mod (sinon null)
+        string gameDirIni;   // choix memorise (jeu= dans Jak2Online.ini)
 
-        // dossier du mod : ce programme est dans <mod>\data\online, le jeu dans <mod>\gk.exe
-        static string ModRoot()
+        static bool IsGameDir(string d)
         {
-            string dir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
-            for (int i = 0; i < 4 && !string.IsNullOrEmpty(dir); i++)
+            return !string.IsNullOrEmpty(d) && File.Exists(Path.Combine(d, "gk.exe"))
+                && Directory.Exists(Path.Combine(d, "data", "goal_src", "jak2"));
+        }
+
+        // installe par le launcher : <install>\features\jak2\mods\<source>\<mod>
+        // -> reglages dans <install>\features\jak2\mods\<source>\_settings\<mod> (comme le launcher)
+        static string LauncherCfgFor(string dir)
+        {
+            try
             {
-                if (File.Exists(Path.Combine(dir, "gk.exe")) && Directory.Exists(Path.Combine(dir, "data"))) return dir;
-                dir = Path.GetDirectoryName(dir);
+                DirectoryInfo mod = new DirectoryInfo(dir.TrimEnd('\\', '/'));
+                DirectoryInfo src = mod.Parent;
+                DirectoryInfo mods = src != null ? src.Parent : null;
+                if (mods != null && mods.Name.Equals("mods", StringComparison.OrdinalIgnoreCase)
+                    && mods.Parent != null && mods.Parent.Name.Equals("jak2", StringComparison.OrdinalIgnoreCase))
+                    return Path.Combine(src.FullName, "_settings", mod.Name);
             }
+            catch (Exception) { }
             return null;
+        }
+
+        // mods Jak 2 installes par le launcher OpenGOAL (dossier d'installation lu dans ses reglages)
+        static string FindInLauncher()
+        {
+            try
+            {
+                string settings = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OpenGOAL-Launcher", "settings.json");
+                if (!File.Exists(settings)) return null;
+                System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(
+                    File.ReadAllText(settings), "\"installationDir\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+                if (!m.Success) return null;
+                string install = m.Groups[1].Value.Replace("\\\\", "\\").Replace("\\/", "/");
+                string mods = Path.Combine(install, "features", "jak2", "mods");
+                if (!Directory.Exists(mods)) return null;
+                string best = null;
+                DateTime bestTime = DateTime.MinValue;
+                foreach (string src in Directory.GetDirectories(mods))
+                {
+                    if (Path.GetFileName(src).StartsWith("_")) continue;
+                    foreach (string mod in Directory.GetDirectories(src))
+                    {
+                        if (!IsGameDir(mod) || !File.Exists(Path.Combine(mod, "data", "online", "Jak2Online.exe"))) continue;
+                        // le plus recent (une mise a jour remplace l'ancienne installation)
+                        DateTime t = File.GetLastWriteTimeUtc(Path.Combine(mod, "gk.exe"));
+                        if (best == null || t > bestTime) { best = mod; bestTime = t; }
+                    }
+                }
+                return best;
+            }
+            catch (Exception) { return null; }
+        }
+
+        void ResolveGame()
+        {
+            gameDir = null;
+            if (IsGameDir(gameDirIni)) gameDir = gameDirIni;
+            if (gameDir == null)
+            {
+                // ce programme est dans <mod>\data\online
+                string dir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+                for (int i = 0; i < 4 && !string.IsNullOrEmpty(dir) && gameDir == null; i++)
+                {
+                    if (IsGameDir(dir)) gameDir = dir;
+                    dir = Path.GetDirectoryName(dir);
+                }
+            }
+            if (gameDir == null) gameDir = FindInLauncher();
+            gameCfg = gameDir != null ? LauncherCfgFor(gameDir) : null;
+        }
+
+        void PickGame()
+        {
+            using (OpenFileDialog d = new OpenFileDialog())
+            {
+                d.Title = W("Choisis gk.exe dans le dossier du mod Jak 2 Online");
+                d.Filter = "gk.exe|gk.exe";
+                if (gameDir != null) d.InitialDirectory = gameDir;
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                string dir = Path.GetDirectoryName(d.FileName);
+                if (!IsGameDir(dir))
+                {
+                    MessageBox.Show(this, W("Ce dossier ne contient pas le mod Jak 2 Online (data\\goal_src\\jak2 manquant)."),
+                        W("Jak 2 En Ligne"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                gameDirIni = dir;
+                SaveIni();
+                MessageBox.Show(this, W("Jeu enregistre. Quitte puis relance Jak2Online.exe pour l'utiliser."),
+                    W("Jak 2 En Ligne"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
 
         void LaunchGame()
@@ -4161,18 +4258,20 @@ namespace Jak2Online
                 QueueLog(W("Le jeu est deja lance."));
                 return;
             }
-            string mod = ModRoot();
-            if (mod == null)
+            if (gameDir == null) ResolveGame();
+            if (gameDir == null)
             {
-                MessageBox.Show(this, W("gk.exe introuvable. Ce programme doit rester dans le dossier data\\online du mod Jak 2 Online."),
-                    W("Jak 2 En Ligne"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                PickGame();
                 return;
             }
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo(Path.Combine(mod, "gk.exe"),
-                    "-g jak2 --proj-path \"" + Path.Combine(mod, "data") + "\" -- -boot -fakeiso");
-                psi.WorkingDirectory = mod;
+                // memes arguments que le launcher OpenGOAL (reglages et sauvegardes du mod)
+                string args = gameCfg != null
+                    ? "-v --game jak2 --config-path \"" + gameCfg + "\" -- -boot -fakeiso"
+                    : "-v --game jak2 --proj-path \"" + Path.Combine(gameDir, "data") + "\" -- -boot -fakeiso";
+                ProcessStartInfo psi = new ProcessStartInfo(Path.Combine(gameDir, "gk.exe"), args);
+                psi.WorkingDirectory = gameDir;
                 psi.UseShellExecute = false;
                 Process.Start(psi);
                 QueueLog(W("Lancement de Jak 2..."));
@@ -4228,6 +4327,7 @@ namespace Jak2Online
                         else if (k == "langue") lang = v.ToLowerInvariant() == "fr" ? 1 : v.ToLowerInvariant() == "en" ? 2 : 0;
                         else if (k == "auto") autoConnect = v != "0";
                         else if (k == "pont" && v.Length > 0) bridgeOverride = v;
+                        else if (k == "jeu" && v.Length > 0) gameDirIni = v;
                     }
                 }
             }
@@ -4251,6 +4351,7 @@ namespace Jak2Online
                 lines.Add("langue=" + (cboLang.SelectedIndex == 1 ? "fr" : cboLang.SelectedIndex == 2 ? "en" : "auto"));
                 lines.Add("auto=" + (autoConnect ? "1" : "0"));
                 if (bridgeOverride != null) lines.Add("pont=" + bridgeOverride);
+                if (gameDirIni != null) lines.Add("jeu=" + gameDirIni);
                 // reperes des actions faites une seule fois (langue au premier lancement, raccourci)
                 if (File.Exists(iniPath))
                     foreach (string old in File.ReadAllLines(iniPath))
@@ -4403,7 +4504,8 @@ namespace Jak2Online
             if (btnBotUi != null) btnBotUi.Visible = client.IsCreateur;
             if (btnPlay != null)
             {
-                btnPlay.Width = client.IsCreateur ? 240 : 370;
+                btnPlay.Width = client.IsCreateur ? 200 : 330;
+                if (btnPickGame != null) btnPickGame.Left = client.IsCreateur ? 466 : 596;
                 btnPlay.Text = client.GameAttached ? W("Jeu lance") : W("JOUER A JAK 2");
                 btnPlay.Enabled = !client.GameAttached;
             }
