@@ -7813,18 +7813,19 @@ namespace Jak2Online
             // Windows 11 ignore ce reglage pour une fenetre cachee (a cote de l'horloge) ou recouverte
             // par le jeu, sauf si on le demande : ProcessPowerThrottling (4), EXECUTION_SPEED (1) et
             // IGNORE_TIMER_RESOLUTION (4) desactives
-            // deux appels separes : le drapeau 0x4 n'existe que sous Windows 11 et ferait echouer le
-            // premier sous Windows 10
-            foreach (uint flag in new uint[] { 0x1, 0x4 })
+            // un seul appel (chaque appel remplace le precedent) ; Windows 10 refuse le drapeau 0x4
+            // (Windows 11 seulement) : on recommence alors avec 0x1 seul
+            try
             {
-                try
+                PowerThrottling pt = new PowerThrottling();
+                pt.Version = 1; pt.ControlMask = 0x1 | 0x4; pt.StateMask = 0;
+                if (!SetProcessInformation(GetCurrentProcess(), 4, ref pt, Marshal.SizeOf(typeof(PowerThrottling))))
                 {
-                    PowerThrottling pt = new PowerThrottling();
-                    pt.Version = 1; pt.ControlMask = flag; pt.StateMask = 0;
+                    pt.ControlMask = 0x1;
                     SetProcessInformation(GetCurrentProcess(), 4, ref pt, Marshal.SizeOf(typeof(PowerThrottling)));
                 }
-                catch (Exception) { }
             }
+            catch (Exception) { }
             if (args.Length > 0 && args[0] == "--createur-testsauvegarde")
             {
                 AllocConsole();

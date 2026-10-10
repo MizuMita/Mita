@@ -105,8 +105,9 @@
 (define-extern ow-rank-color (function int font-color))
 (define *online-pose-tx* (new 'global 'online-pose-tx))
 ;; poses des joueurs distants : 16 blocs de 6192 octets, adresses calculees a la main
-;; seq u32 @0, joueur u32 @4, long. actuelle @8, long. precedente @12, heure actuelle @16,
-;; heure precedente @24, intervalle f32 @32, pose actuelle @48, pose precedente @3120
+;; seq u32 @0, joueur u32 @4, long. actuelle @8, long. precedente @12, debut du segment s64 @16,
+;; duree du segment f32 @24, intervalle moyen f32 @32, derniere pose vue : seq u32 @36 / arrivee s64 @40,
+;; pose actuelle @48, pose precedente @3120
 (define *online-pose-mem* (the-as pointer (logand -16 (+ 15 (the-as int (malloc 'global (+ (* 16 6192) 16)))))))
 (mem-set32! *online-pose-mem* (/ (* 16 6192) 4) 0)
 
@@ -851,6 +852,9 @@
     ;; PASSAGER : assis dans le vehicule du conducteur (a cote / derriere), cale sur son avatar
     ;; (ou sur moi si c'est moi qui conduis) : il ne traine pas derriere le vehicule
     (set! (-> self seated) #f)
+    (if (not (logtest? (-> rs flags) ONLINE_FLAG_PASSENGER))
+        (set! (-> self seat-drv) -2) ;; descendu : le prochain trajet ne garde pas l'ancien conducteur
+        )
     (when (logtest? (-> rs flags) ONLINE_FLAG_PASSENGER)
       ;; conducteur le plus proche de sa position (qui arrive en retard : rayon large) ; celui
       ;; d'avant garde un avantage de 4 m, pour ne pas sauter d'une voiture a l'autre
@@ -1684,7 +1688,9 @@
                       )
                     (mem-copy! (&+ ps 48) (&+ base 16) len)
                     (online-set-u32! ps 8 len)
-                    (let ((ival2 (fmax 5.0 (online-get-f32 ps 32))))
+                    ;; duree du segment : la moyenne d'AVANT cette arrivee si elle est plus courte (une
+                    ;; pose en retard ne doit pas allonger son propre segment)
+                    (let ((ival2 (fmin ival (fmax 5.0 (online-get-f32 ps 32)))))
                       (cond
                         ((and same (<= arrived end))
                          ;; elle attendait : elle commence la ou la precedente finit (pas de saut) ;
@@ -2768,6 +2774,9 @@
              (vector-reset! (-> loc vel))
              )
          )
+       (if *ow-riding*
+           (vector-reset! (-> loc vel))
+           )
        (set! (-> loc vel w) 0.0)
        (let ((ch (-> t skel root-channel 0)))
          (set! (-> loc anim-idx) (online-target-anim-index t (-> ch frame-group)))
