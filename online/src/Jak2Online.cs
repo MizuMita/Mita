@@ -3870,7 +3870,7 @@ namespace Jak2Online
             startHidden = hidden;
             Text = W("Jak 2 En Ligne");
             Width = 660;
-            Height = 674;
+            Height = 712;
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Segoe UI", 9f);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
@@ -3948,10 +3948,24 @@ namespace Jak2Online
             Controls.Add(btnBot);
             Button btnLeave = new Button();
             btnLeave.Text = W("Quitter la session");
-            btnLeave.SetBounds(360, y - 1, 130, 26);
+            btnLeave.SetBounds(500, y - 1, 130, 26);
             btnLeave.Click += delegate { client.UiLeave(); };
             Controls.Add(btnLeave);
             y += 34;
+            // session privee + lancement du jeu directement depuis cette fenetre
+            Button btnPrivate = new Button();
+            btnPrivate.Text = W("Creer une session privee (code)");
+            btnPrivate.SetBounds(12, y - 1, 238, 30);
+            btnPrivate.Click += delegate { client.UiCreate(false, 8, true); };
+            Controls.Add(btnPrivate);
+            btnPlay = new Button();
+            btnPlay.Text = W("JOUER A JAK 2");
+            btnPlay.Font = new Font(Font, FontStyle.Bold);
+            btnPlay.SetBounds(260, y - 1, 370, 30);
+            btnPlay.Click += delegate { LaunchGame(); };
+            Controls.Add(btnPlay);
+            btnBot.SetBounds(510, y - 1, 120, 30);
+            y += 38;
             // joueur 2 local : 2e fenetre du jeu avec une 2e manette (comme un ecran partage)
             btnJ2 = new Button();
             btnJ2.SetBounds(12, y - 1, 260, 26);
@@ -4125,6 +4139,49 @@ namespace Jak2Online
         }
 
         string W(string fr) { return Lang.Win(UiLang, fr); }
+
+        Button btnPlay;
+
+        // dossier du mod : ce programme est dans <mod>\data\online, le jeu dans <mod>\gk.exe
+        static string ModRoot()
+        {
+            string dir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+            for (int i = 0; i < 4 && !string.IsNullOrEmpty(dir); i++)
+            {
+                if (File.Exists(Path.Combine(dir, "gk.exe")) && Directory.Exists(Path.Combine(dir, "data"))) return dir;
+                dir = Path.GetDirectoryName(dir);
+            }
+            return null;
+        }
+
+        void LaunchGame()
+        {
+            if (Process.GetProcessesByName("gk").Length > 0)
+            {
+                QueueLog(W("Le jeu est deja lance."));
+                return;
+            }
+            string mod = ModRoot();
+            if (mod == null)
+            {
+                MessageBox.Show(this, W("gk.exe introuvable. Ce programme doit rester dans le dossier data\\online du mod Jak 2 Online."),
+                    W("Jak 2 En Ligne"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo(Path.Combine(mod, "gk.exe"),
+                    "-g jak2 --proj-path \"" + Path.Combine(mod, "data") + "\" -- -boot -fakeiso");
+                psi.WorkingDirectory = mod;
+                psi.UseShellExecute = false;
+                Process.Start(psi);
+                QueueLog(W("Lancement de Jak 2..."));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, W("Impossible de lancer le jeu : ") + ex.Message, W("Jak 2 En Ligne"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
 
         void ApplyName()
         {
@@ -4344,6 +4401,12 @@ namespace Jak2Online
         void RefreshUi()
         {
             if (btnBotUi != null) btnBotUi.Visible = client.IsCreateur;
+            if (btnPlay != null)
+            {
+                btnPlay.Width = client.IsCreateur ? 240 : 370;
+                btnPlay.Text = client.GameAttached ? W("Jeu lance") : W("JOUER A JAK 2");
+                btnPlay.Enabled = !client.GameAttached;
+            }
             if (btnJ2 != null) btnJ2.Text = client.LocalJ2Running ? W("Arreter le joueur 2 local") : W("+ Joueur 2 local (2e manette)");
             LangFirstRun();
             lock (pendingLog)
@@ -4369,7 +4432,7 @@ namespace Jak2Online
                     + (client.HostId == client.MyId ? W("  -  vous etes l'hote") : "")
                     + (client.InWorld && client.Prof != null ? W("  -  niveau ") + client.Prof.Level + ", " + client.TestMoney + W(" orbes") : "");
             else
-                sess = W("Session : aucune (creez-en une depuis le menu Start du jeu)");
+                sess = W("Session : aucune (Session publique, Creer une session privee ou Rejoindre ci-dessous)");
             lblSession.Text = sess;
             string tip = client.SessionId != 0 ? "Jak 2 En Ligne - " + client.SessionCode + " (" + client.SessionCount + ")" : "Jak 2 En Ligne - " + (client.NetState >= Shm.NET_LOBBY ? W("connecte") : W("hors ligne"));
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
