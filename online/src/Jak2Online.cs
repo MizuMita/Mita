@@ -935,6 +935,8 @@ namespace Jak2Online
         readonly byte[] tmp = new byte[TxBytes];
         uint seq = (uint)Environment.TickCount | 1;
         uint lastTx;
+        // numero de la derniere ecriture du jeu (une par capture de pose, toutes les 33 ms)
+        public uint TxSeq { get { return lastTx; } }
         uint lastFrame;
         bool anyFrame, anyChange;
         DateTime lastChange = DateTime.MinValue;
@@ -2587,7 +2589,7 @@ namespace Jak2Online
         // pose choisie par le pont sur la grille de capture du jeu (une capture sur 2, 3 ou 4) :
         // toujours le meme ecart de mouvement entre deux poses envoyees (plus d'acces de vitesse)
         byte[] posePending;
-        uint lastPoseLseq;
+        uint lastPoseCap;
         // donnees recues (etat ou pose) : game-in.bin reecrit au prochain tour du pont
         volatile bool netArrived;
         DateTime localPoseTime = DateTime.MinValue;
@@ -3593,10 +3595,13 @@ namespace Jak2Online
                 }
                 if (pose != null && SessionId != 0)
                 {
+                    // on compte les CAPTURES du jeu (une par ecriture de game-out), pas ses images :
+                    // une sur 2 (66 ms), 3 ou 4 selon la taille de la session, quel que soit le fps
+                    uint cap = bridge.TxSeq;
                     uint stepN = (uint)(SessionCount > 12 ? 4 : SessionCount > 6 ? 3 : 2);
-                    if (lseq - lastPoseLseq >= stepN || lseq < lastPoseLseq)
+                    if (cap - lastPoseCap >= stepN || cap < lastPoseCap)
                     {
-                        lastPoseLseq = lseq;
+                        lastPoseCap = cap;
                         Interlocked.Exchange(ref posePending, pose);
                     }
                 }
@@ -7808,13 +7813,18 @@ namespace Jak2Online
             // Windows 11 ignore ce reglage pour une fenetre cachee (a cote de l'horloge) ou recouverte
             // par le jeu, sauf si on le demande : ProcessPowerThrottling (4), EXECUTION_SPEED (1) et
             // IGNORE_TIMER_RESOLUTION (4) desactives
-            try
+            // deux appels separes : le drapeau 0x4 n'existe que sous Windows 11 et ferait echouer le
+            // premier sous Windows 10
+            foreach (uint flag in new uint[] { 0x1, 0x4 })
             {
-                PowerThrottling pt = new PowerThrottling();
-                pt.Version = 1; pt.ControlMask = 0x1 | 0x4; pt.StateMask = 0;
-                SetProcessInformation(GetCurrentProcess(), 4, ref pt, Marshal.SizeOf(typeof(PowerThrottling)));
+                try
+                {
+                    PowerThrottling pt = new PowerThrottling();
+                    pt.Version = 1; pt.ControlMask = flag; pt.StateMask = 0;
+                    SetProcessInformation(GetCurrentProcess(), 4, ref pt, Marshal.SizeOf(typeof(PowerThrottling)));
+                }
+                catch (Exception) { }
             }
-            catch (Exception) { }
             if (args.Length > 0 && args[0] == "--createur-testsauvegarde")
             {
                 AllocConsole();
