@@ -93,6 +93,7 @@
 (mem-set32! (the-as pointer *online-ext*) (/ ONLINE_EXT_SIZE 4) 0)
 (define *online-block-live* #f)
 (define-extern online-world-update (function symbol none))
+(define-extern ow-ride-seat! (function none))
 (define-extern online-world-draw (function symbol none))
 (define-extern online-world-in-event! (function online-event none))
 (define-extern online-world-blocks-input? (function symbol))
@@ -104,8 +105,9 @@
 (define-extern ow-rank-color (function int font-color))
 (define *online-pose-tx* (new 'global 'online-pose-tx))
 ;; poses des joueurs distants : 16 blocs de 6192 octets, adresses calculees a la main
-;; seq u32 @0, joueur u32 @4, long. actuelle @8, long. precedente @12, heure actuelle @16,
-;; heure precedente @24, intervalle f32 @32, pose actuelle @48, pose precedente @3120
+;; seq u32 @0, joueur u32 @4, long. actuelle @8, long. precedente @12, debut du segment s64 @16,
+;; duree du segment f32 @24, intervalle moyen f32 @32, derniere pose vue : seq u32 @36 / arrivee s64 @40,
+;; pose actuelle @48, pose precedente @3120
 (define *online-pose-mem* (the-as pointer (logand -16 (+ 15 (the-as int (malloc 'global (+ (* 16 6192) 16)))))))
 (mem-set32! *online-pose-mem* (/ (* 16 6192) 4) 0)
 
@@ -285,9 +287,13 @@
                (online-copy-range! 896 1452)  ;; evenements entrants, clavier, sauvegarde, test
                (online-copy-range! 1536 ONLINE_SHM_SIZE) ;; avatars, sessions, joueurs, messages
                (when (= n ONLINE_RX_SIZE)
-                 (online-poses-receive!)
                  (online-ext-receive!)
                  )
+               )
+             ;; poses : chaque case a sa propre sequence (debut/fin) -> regardees a CHAQUE image,
+             ;; pas seulement quand tout le fichier a change (moins d'irregularite)
+             (when (= n ONLINE_RX_SIZE)
+               (online-poses-receive!)
                )
              )
            )
@@ -552,6 +558,12 @@
    (wear         int32)        ;; ses ACCESSOIRES (octet de la pose : tete 3 bits, visage 2, dos 3)
    (accs         handle 3)     ;; les accessoires poses sur lui (ow-acc)
    (net-pos      vector     :inline) ;; position du paquet precedent (vitesse mesuree)
+   (seated       symbol)       ;; passager assis : sa racine = le siege du conducteur, pas sa pose
+   (seat-drv     int32)        ;; conducteur : -1 = moi, sinon case de son avatar
+   (seat-bike    symbol)
+   (draw-pos     vector     :inline) ;; position affichee (apres les poses)
+   (draw-quat    quaternion :inline)
+   (draw-prev    vector     :inline) ;; position affichee a l'image d'avant
    )
   (:states
     online-puppet-idle
@@ -706,6 +718,12 @@
 (define *online-menu-open* #f) ;; menu SELECT ou boutique ouvert (ecrit par online-world)
 (define *ow-riding-id* (the-as uint 0)) ;; conducteur dont je suis passager (ecrit par online-world)
 
+;; racine de Jak au moment ou ses os ont ete calcules (debut de online-update) : ce que
+;; online-update deplace ensuite (passager, bousculades) ne doit pas fausser la pose envoyee
+(define *online-cap-trans* (new 'global 'vector))
+(define *online-cap-quat* (new 'global 'quaternion))
+(define *online-cap-ok* #f)
+
 (defun online-seat-offset! ((out vector) (q quaternion) (bike symbol))
   "place du passager par rapport au conducteur : a cote en voiture, derriere (et plus haut) en moto"
   (if bike
@@ -779,7 +797,7 @@
             (vector-float*! est est (/ 1.0 dtp))
             (set! (-> est w) 0.0)
             (if (and (< (vector-length est) (meters 80.0))
-                     (< (vector-length (-> self vel)) (* 0.5 (vector-length est)))
+                     (< (vector-length (-> self vel)) (meters 0.5))
                      )
                 (vector-copy! (-> self vel) est)
                 )
@@ -811,6 +829,9 @@
       (when (not (-> self placed))
         (vector-copy! (-> self root trans) (-> self goal-pos))
         (quaternion-copy! (-> self root quat) (-> self goal-quat))
+        (vector-copy! (-> self draw-pos) (-> self goal-pos))
+        (vector-copy! (-> self draw-prev) (-> self goal-pos))
+        (quaternion-copy! (-> self draw-quat) (-> self goal-quat))
         (set! (-> self placed) #t)
         )
       )
@@ -830,31 +851,41 @@
     (quaternion-normalize! (-> self root quat))
     ;; PASSAGER : assis dans le vehicule du conducteur (a cote / derriere), cale sur son avatar
     ;; (ou sur moi si c'est moi qui conduis) : il ne traine pas derriere le vehicule
+    (set! (-> self seated) #f)
+    (if (not (logtest? (-> rs flags) ONLINE_FLAG_PASSENGER))
+        (set! (-> self seat-drv) -2) ;; descendu : le prochain trajet ne garde pas l'ancien conducteur
+        )
     (when (logtest? (-> rs flags) ONLINE_FLAG_PASSENGER)
+      ;; conducteur le plus proche de sa position (qui arrive en retard : rayon large) ; celui
+      ;; d'avant garde un avantage de 4 m, pour ne pas sauter d'une voiture a l'autre
       (let ((dpos (the-as vector #f))
             (dquat (the-as quaternion #f))
             (bike #f)
-            (bd (meters 8.0))
+            (prev-drv (-> self seat-drv))
+            (drv -2)
+            (bd (meters 25.0))
             )
         (when (and *target* (focus-test? *target* pilot)
-                   (< (vector-vector-distance (-> *target* control trans) (-> self goal-pos)) bd)
+                   (< (- (vector-vector-distance (-> *target* control trans) (-> self goal-pos)) (if (= prev-drv -1) (meters 4.0) 0.0)) bd)
                    )
-          (set! bd (vector-vector-distance (-> *target* control trans) (-> self goal-pos)))
+          (set! bd (- (vector-vector-distance (-> *target* control trans) (-> self goal-pos)) (if (= prev-drv -1) (meters 4.0) 0.0)))
           (set! dpos (-> *target* control trans))
           (set! dquat (-> *target* control quat))
           (set! bike (online-target-bike? *target*))
+          (set! drv -1)
           )
         (dotimes (j ONLINE_MAX_PUPPETS)
           (let ((p2 (online-puppet-proc j)))
             (when (and p2 (!= p2 self) (-> p2 placed))
               (let ((rs2 (-> *online-shm* remote (-> p2 slot))))
                 (when (logtest? (-> rs2 flags) ONLINE_FLAG_VEHICLE)
-                  (let ((d (vector-vector-distance (-> p2 root trans) (-> self goal-pos))))
+                  (let ((d (- (vector-vector-distance (-> p2 root trans) (-> self goal-pos)) (if (= prev-drv j) (meters 4.0) 0.0))))
                     (when (< d bd)
                       (set! bd d)
                       (set! dpos (-> p2 root trans))
                       (set! dquat (-> p2 root quat))
                       (set! bike (logtest? (-> rs2 flags) ONLINE_FLAG_BIKE))
+                      (set! drv j)
                       )
                     )
                   )
@@ -868,7 +899,14 @@
             (vector+! (-> self root trans) dpos off)
             (quaternion-copy! (-> self root quat) dquat)
             )
+          ;; online-apply-poses! le recale sur la position FINALE du conducteur
+          (set! (-> self seated) #t)
+          (set! (-> self seat-drv) drv)
+          (set! (-> self seat-bike) (the-as symbol bike))
           )
+        (if (not dpos)
+            (set! (-> self seat-drv) -2)
+            )
         )
       )
     ;; affichage : avec une pose, le squelette est ecrit par online-apply-poses!
@@ -1152,6 +1190,8 @@
   (set! (-> self fx-time) 0)
   (set! (-> self fx-want) #f)
   (set! (-> self dead-time) 0)
+  (set! (-> self seated) #f)
+  (set! (-> self seat-drv) -2)
   (set! (-> self was-dead) #f)
   (set! (-> self death-fx) #f)
   (dotimes (k ONLINE_PART_SLOTS)
@@ -1507,18 +1547,22 @@
             (inv (new 'stack-no-clear 'matrix))
             (geo 0) ;; jak 2 : une seule tenue
             )
-        (quaternion->matrix root (-> t control quat))
-        (vector-copy! (-> root trans) (-> t control trans))
-        (set! (-> root trans w) 1.0)
-        (matrix-inverse-of-rot-trans! inv root)
-        (online-set-u8! buf 0 1)
-        (online-set-f32! buf 4 (-> t control trans x))
-        (online-set-f32! buf 8 (-> t control trans y))
-        (online-set-f32! buf 12 (-> t control trans z))
-        (online-set-f32! buf 16 (-> t control quat x))
-        (online-set-f32! buf 20 (-> t control quat y))
-        (online-set-f32! buf 24 (-> t control quat z))
-        (online-set-f32! buf 28 (-> t control quat w))
+        (let ((ct (if *online-cap-ok* *online-cap-trans* (-> t control trans)))
+              (cq (if *online-cap-ok* *online-cap-quat* (-> t control quat)))
+              )
+          (quaternion->matrix root cq)
+          (vector-copy! (-> root trans) ct)
+          (set! (-> root trans w) 1.0)
+          (matrix-inverse-of-rot-trans! inv root)
+          (online-set-u8! buf 0 1)
+          (online-set-f32! buf 4 (-> ct x))
+          (online-set-f32! buf 8 (-> ct y))
+          (online-set-f32! buf 12 (-> ct z))
+          (online-set-f32! buf 16 (-> cq x))
+          (online-set-f32! buf 20 (-> cq y))
+          (online-set-f32! buf 24 (-> cq z))
+          (online-set-f32! buf 28 (-> cq w))
+          )
         (set! len ONLINE_POSE_HDR)
         (let ((before len))
           ;; Jak d'abord (indispensable), Daxter en dernier (le plus gros)
@@ -1586,9 +1630,14 @@
   )
 
 (defun online-poses-receive! ()
-  "nouvelles poses dans game-in.bin -> *online-poses* (la precedente est gardee)"
+  "nouvelles poses dans game-in.bin -> *online-poses* (la precedente est gardee).
+   Une pose arrivee pendant l'interpolation en cours ATTEND qu'elle finisse : plus de saut quand un
+   paquet arrive tot, plus d'arret quand il arrive tard. Quand on a pris du retard (la pose a du
+   attendre plus d'un demi-intervalle), le segment suivant est joue 20 % plus vite.
+   case : t-cur @16, duree du segment en cours @24 (f32), intervalle moyen @32,
+   derniere pose vue : seq @36, arrivee @40"
   (let ((rx *online-rx*)
-                (now (online-now))
+        (now (online-now))
         )
     (dotimes (i ONLINE_MAX_PUPPETS)
       (let* ((base (&+ (the-as pointer rx) (+ ONLINE_POSE_RX_OFS (* i ONLINE_POSE_SLOT))))
@@ -1599,33 +1648,65 @@
                    (= head (online-get-u32 base ONLINE_POSE_TAIL))
                    (!= head (online-get-u32 ps 0))
                    )
-          (online-set-u32! ps 0 head)
           (let ((len (the-as int (online-get-u32 base 4)))
                 (pid (online-get-u32 base 8))
                 )
             (when (and (<= ONLINE_POSE_HDR len) (<= len ONLINE_POSE_MAX) (= (online-get-u8 base 16) 1))
-              (cond
-                ((and (= pid (online-get-u32 ps 4)) (< 0 (the-as int (online-get-u32 ps 8))))
-                 (mem-copy! (&+ ps 3120) (&+ ps 48) (the-as int (online-get-u32 ps 8)))
-                 (online-set-u32! ps 12 (online-get-u32 ps 8))
-                 (online-set-s64! ps 24 (online-get-s64 ps 16))
-                 )
-                (else
-                  ;; nouveau joueur dans cette case : pas d'interpolation
-                  (mem-copy! (&+ ps 3120) (&+ base 16) len)
-                  (online-set-u32! ps 12 len)
-                  (online-set-s64! ps 24 now)
-                  (online-set-f32! ps 32 20.0)
-                  (online-set-u32! ps 4 pid)
-                  )
-                )
-              (mem-copy! (&+ ps 48) (&+ base 16) len)
-              (online-set-u32! ps 8 len)
-              (online-set-s64! ps 16 now)
-              (let ((dt (the float (- now (online-get-s64 ps 24)))))
-                (if (< 0.0 dt)
-                    (online-set-f32! ps 32 (+ (* 0.7 (online-get-f32 ps 32)) (* 0.3 (fmax 5.0 (fmin 60.0 dt)))))
+              (let ((same (and (= pid (online-get-u32 ps 4)) (< 0 (the-as int (online-get-u32 ps 8)))))
+                    (ival (fmax 5.0 (online-get-f32 ps 32)))
                     )
+                ;; premiere image ou on la voit : cadence moyenne d'arrivee (lente ; un grand ecart
+                ;; est borne, pas ignore : si l'autre ralentit, la moyenne le suit)
+                (when (!= head (online-get-u32 ps 36))
+                  (let ((dt (the float (- now (online-get-s64 ps 40)))))
+                    (if (and same (< 0.0 dt))
+                        (online-set-f32! ps 32 (+ (* 0.9 ival) (* 0.1 (fmax 5.0 (fmin 60.0 (fmin dt (* 2.5 ival)))))))
+                        )
+                    )
+                  (online-set-u32! ps 36 head)
+                  (online-set-s64! ps 40 now)
+                  )
+                (let* ((seg (fmax 1.0 (online-get-f32 ps 24)))
+                       (end (+ (online-get-s64 ps 16) (the int (+ 0.5 seg))))
+                       (arrived (online-get-s64 ps 40))
+                       )
+                  ;; prise : interpolation en cours finie, ou nouveau joueur dans la case
+                  (when (or (not same) (>= now end))
+                    (online-set-u32! ps 0 head)
+                    (cond
+                      (same
+                        (mem-copy! (&+ ps 3120) (&+ ps 48) (the-as int (online-get-u32 ps 8)))
+                        (online-set-u32! ps 12 (online-get-u32 ps 8))
+                        )
+                      (else
+                        ;; nouveau joueur dans cette case : pas d'interpolation
+                        (mem-copy! (&+ ps 3120) (&+ base 16) len)
+                        (online-set-u32! ps 12 len)
+                        (online-set-f32! ps 32 20.0)
+                        (online-set-u32! ps 4 pid)
+                        )
+                      )
+                    (mem-copy! (&+ ps 48) (&+ base 16) len)
+                    (online-set-u32! ps 8 len)
+                    ;; duree du segment : la moyenne d'AVANT cette arrivee si elle est plus courte (une
+                    ;; pose en retard ne doit pas allonger son propre segment)
+                    (let ((ival2 (fmin ival (fmax 5.0 (online-get-f32 ps 32)))))
+                      (cond
+                        ((and same (<= arrived end))
+                         ;; elle attendait : elle commence la ou la precedente finit (pas de saut) ;
+                         ;; plus vite si elle a attendu plus d'un demi-intervalle (retard qui baisse)
+                         (online-set-s64! ps 16 end)
+                         (online-set-f32! ps 24 (if (< (* 0.5 ival2) (the float (- end arrived))) (* 0.8 ival2) ival2))
+                         )
+                        (else
+                          ;; en retard (ou nouveau joueur) : elle part maintenant
+                          (online-set-s64! ps 16 now)
+                          (online-set-f32! ps 24 ival2)
+                          )
+                        )
+                      )
+                    )
+                  )
                 )
               )
             )
@@ -2361,12 +2442,47 @@
   (none)
   )
 
+(defun online-seat-from-driver! ((p online-puppet))
+  "passager assis : racine = siege du conducteur, a sa position finale de cette image"
+  (let ((dpos (the-as vector #f))
+        (dquat (the-as quaternion #f))
+        )
+    (cond
+      ((= (-> p seat-drv) -1)
+       (when (and *target* (nonzero? (-> *target* control)))
+         (set! dpos (-> *target* control trans))
+         (set! dquat (-> *target* control quat))
+         )
+       )
+      ((>= (-> p seat-drv) 0)
+       (let ((d (online-puppet-proc (-> p seat-drv))))
+         (when (and d (!= d p))
+           (set! dpos (-> d root trans))
+           (set! dquat (-> d root quat))
+           )
+         )
+       )
+      )
+    (when dpos
+      (let ((off (new 'stack-no-clear 'vector)))
+        (online-seat-offset! off dquat (-> p seat-bike))
+        (vector+! (-> p root trans) dpos off)
+        (set! (-> p root trans w) 1.0)
+        (quaternion-copy! (-> p root quat) dquat)
+        )
+      )
+    (the-as symbol dpos)
+    )
+  )
+
 (defun online-apply-poses! ()
-  "applique les poses recues aux avatars (appele apres tous les processus, avant l'affichage)"
+  "applique les poses recues aux avatars (appele apres tous les processus, avant l'affichage).
+   Deux passes : d'abord les autres, puis les passagers assis (cales sur leur conducteur final)."
   (let ((now (online-now)))
+    (dotimes (pass 2)
     (dotimes (i ONLINE_MAX_PUPPETS)
       (let ((p (online-puppet-proc i)))
-        (when p
+        (when (and p (= pass (if (-> p seated) 1 0)))
           (let ((ps (online-ps i))
                 (on #f)
                 )
@@ -2379,7 +2495,7 @@
                      )
                 (when (>= jak-ofs 0)
                   (set! on #t)
-                  (let* ((alpha (fmax 0.0 (fmin 1.0 (/ (the float (- now (online-get-s64 ps 16))) (fmax 1.0 (online-get-f32 ps 32))))))
+                  (let* ((alpha (fmax 0.0 (fmin 1.0 (/ (the float (- now (online-get-s64 ps 16))) (fmax 1.0 (online-get-f32 ps 24))))))
                          (root (new 'stack-no-clear 'matrix))
                          (pa (new 'stack-no-clear 'vector))
                          (pb (new 'stack-no-clear 'vector))
@@ -2399,7 +2515,9 @@
                     (set! (-> qb w) (online-get-f32 cur 28))
                     (quaternion-normalize! qa)
                     (quaternion-normalize! qb)
-                    (if (< (meters 10.0) (vector-vector-distance pa pb))
+                    ;; teleportation : saut sans interpolation (seuil plus grand quand il va vite)
+                    (if (< (fmax (meters 10.0) (* 3.0 (vector-length (-> p vel)) (* 0.0033333334 (online-get-f32 ps 32))))
+                           (vector-vector-distance pa pb))
                         (set! alpha 1.0)
                         )
                     ;; donnees invalides (NaN) : on garde l'ancienne position
@@ -2407,10 +2525,12 @@
                       (vector-copy! pa pb)
                       (quaternion-copy! qa qb)
                       )
-                    (vector-lerp! (-> p root trans) pa pb alpha)
-                    (set! (-> p root trans w) 1.0)
-                    (quaternion-slerp! (-> p root quat) qa qb alpha)
-                    (quaternion-normalize! (-> p root quat))
+                    (when (not (and (-> p seated) (online-seat-from-driver! p)))
+                      (vector-lerp! (-> p root trans) pa pb alpha)
+                      (set! (-> p root trans w) 1.0)
+                      (quaternion-slerp! (-> p root quat) qa qb alpha)
+                      (quaternion-normalize! (-> p root quat))
+                      )
                     (quaternion->matrix root (-> p root quat))
                     (vector-copy! (-> root trans) (-> p root trans))
                     (set! (-> root trans w) 1.0)
@@ -2540,9 +2660,14 @@
                 )
               )
             (set! (-> p pose-on) on)
+            ;; position affichee (le passager local s'y assoit juste apres, ow-ride-seat!)
+            (vector-copy! (-> p draw-prev) (-> p draw-pos))
+            (vector-copy! (-> p draw-pos) (-> p root trans))
+            (quaternion-copy! (-> p draw-quat) (-> p root quat))
             )
           )
         )
+      )
       )
     )
   (none)
@@ -2649,6 +2774,9 @@
              (vector-reset! (-> loc vel))
              )
          )
+       (if *ow-riding*
+           (vector-reset! (-> loc vel))
+           )
        (set! (-> loc vel w) 0.0)
        (let ((ch (-> t skel root-channel 0)))
          (set! (-> loc anim-idx) (online-target-anim-index t (-> ch frame-group)))
@@ -3887,6 +4015,14 @@
   )
 
 (defun online-update ()
+  ;; racine de Jak telle que ses os viennent d'etre calcules (avant que online-update le deplace)
+  (let ((t *target*))
+    (set! *online-cap-ok* (the-as symbol (and t (nonzero? (-> t control)))))
+    (when *online-cap-ok*
+      (vector-copy! *online-cap-trans* (-> t control trans))
+      (quaternion-copy! *online-cap-quat* (-> t control quat))
+      )
+    )
   (online-log-parts!)
   (online-local-j2-tick!)
   (let ((shm *online-shm*)
@@ -3938,6 +4074,7 @@
       (online-write-local!)
       (online-update-puppets! in-session)
       (online-apply-poses!)
+      (ow-ride-seat!)
       (cond
         (in-session
          (online-track-death!)
