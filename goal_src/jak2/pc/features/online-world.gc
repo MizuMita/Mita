@@ -2566,7 +2566,7 @@
       ((nonzero? (-> w ride-with))
        (let ((pos (ow-ride-driver-pos (-> w ride-with))))
          (cond
-           ((or (not t) (not pos) (focus-test? t dead) (not (ow-ride-grabbed? t)) (not (-> w active))
+           ((or (not t) (not pos) (focus-test? t dead) (not (ow-ride-grabbed? t)) (not (online-in-session?))
                 (and (or (cpad-pressed? 0 triangle) *ow-ride-press*) (not (-> w tab-open)) (not (-> w shop-open)) (not (-> w chat-open)) (not *progress-process*))
                 )
             (ow-ride-stop! pos)
@@ -2603,7 +2603,7 @@
            )
          )
        )
-      ((and t (-> w active) (not (-> w tab-open)) (not (-> w shop-open)) (not (-> w chat-open)) (not *progress-process*)
+      ((and t (online-in-session?) (not (-> w tab-open)) (not (-> w shop-open)) (not (-> w chat-open)) (not *progress-process*)
             (not (-> w in-shop-zone)) (not (focus-test? t dead pilot board flut grabbed hit)) (not (movie?)))
        (let ((best (the-as uint 0))
              (bd (meters 7.0))
@@ -4442,8 +4442,8 @@
           )
         )
       )
-    ;; passager : invite
-    (when (and hud? (-> w active) (not (-> w tab-open)) (not (-> w shop-open)))
+    ;; passager : invite (toutes les sessions, pas seulement le monde en ligne)
+    (when (and hud? (online-in-session?) (not (-> w tab-open)) (not (-> w shop-open)))
       (cond
         ((nonzero? (-> w ride-with))
          (format (clear (-> w str)) (online-fr "PASSAGER DE ~S  -  TRIANGLE : DESCENDRE" "RIDING WITH ~S  -  TRIANGLE: GET OFF")

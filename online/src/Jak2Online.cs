@@ -848,7 +848,7 @@ namespace Jak2Online
             List<KeyValuePair<float, SPlayer>> near = new List<KeyValuePair<float, SPlayer>>();
             while (running)
             {
-                Thread.Sleep(50);
+                Thread.Sleep(33);
                 tick++;
                 List<Conn> timeouts = new List<Conn>();
                 lock (lk)
@@ -878,13 +878,13 @@ namespace Jak2Online
                             for (int i = 0; i < n; i++) w.U32(near[i].Value.Id).Bytes(near[i].Value.State, 0, Proto.StateSize);
                             rcv.C.Send(w.ToArray());
                         }
-                        if (tick % 20 == 0)
+                        if (tick % 30 == 0)
                         {
                             SendPlayers(s);
                             Broadcast(s, SessionPacket(s), null);
                         }
                     }
-                    if (tick % 40 == 0)
+                    if (tick % 60 == 0)
                     {
                         DateTime now = DateTime.UtcNow;
                         foreach (SPlayer p in players.Values)
@@ -2823,7 +2823,7 @@ namespace Jak2Online
                         PosesSent++;
                     }
                 }
-                if (SessionId != 0 && (now - lastState).TotalMilliseconds >= 50)
+                if (SessionId != 0 && (now - lastState).TotalMilliseconds >= 33)
                 {
                     lastState = now;
                     byte[] st = null;
@@ -7753,9 +7753,13 @@ namespace Jak2Online
             return f.ShowDialog() == DialogResult.OK ? t.Text : null;
         }
 
+        [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
+
         [STAThread]
         static int Main(string[] args)
         {
+            // minuteur Windows a 1 ms (sinon les Sleep sont arrondis a ~16 ms : etats envoyes en retard et par a-coups)
+            try { timeBeginPeriod(1); } catch (Exception) { }
             if (args.Length > 0 && args[0] == "--createur-testsauvegarde")
             {
                 AllocConsole();
