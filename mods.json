@@ -6,21 +6,31 @@
     "jak2-online": {
       "displayName": "Jak 2 Online",
       "description": "Jak 2 en ligne : monde partagé, sessions, PvP.",
-      "authors": ["Mita"],
-      "tags": ["multiplayer"],
-      "supportedGames": ["jak2"],
+      "authors": [
+        "Mita"
+      ],
+      "tags": [
+        "multiplayer"
+      ],
+      "supportedGames": [
+        "jak2"
+      ],
       "versions": [
         {
           "version": "1.0.5",
           "publishedDate": "2026-10-10T21:30:00Z",
-          "supportedGames": ["jak2"],
+          "supportedGames": [
+            "jak2"
+          ],
           "assets": {
             "windows": "https://raw.githubusercontent.com/MizuMita/mita/main/dist/jak2-online-windows-1.0.5.zip",
             "linux": null,
             "macos": null
           }
         }
-      ]
+      ],
+      "websiteUrl": "https://github.com/MizuMita/mita"
     }
-  }
+  },
+  "texturePacks": {}
 }
