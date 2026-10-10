@@ -15,7 +15,7 @@
           "publishedDate": "2026-10-10T00:00:00Z",
           "supportedGames": ["jak2"],
           "assets": {
-            "windows": "https://github.com/MizuMita/mita/releases/download/v1.0.0/jak2-online-windows.zip",
+            "windows": "https://raw.githubusercontent.com/MizuMita/mita/main/dist/jak2-online-windows.zip",
             "linux": null,
             "macos": null
           }
