@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "sourceName": "Mita",
-  "lastUpdated": "2026-10-10T00:00:00Z",
+  "lastUpdated": "2026-10-10T18:30:00Z",
   "mods": {
     "jak2-online": {
       "displayName": "Jak 2 Online",
@@ -11,11 +11,11 @@
       "supportedGames": ["jak2"],
       "versions": [
         {
-          "version": "1.0.0",
-          "publishedDate": "2026-10-10T00:00:00Z",
+          "version": "1.0.1",
+          "publishedDate": "2026-10-10T18:30:00Z",
           "supportedGames": ["jak2"],
           "assets": {
-            "windows": "https://raw.githubusercontent.com/MizuMita/mita/main/dist/jak2-online-windows.zip",
+            "windows": "https://raw.githubusercontent.com/MizuMita/mita/main/dist/jak2-online-windows-1.0.1.zip",
             "linux": null,
             "macos": null
           }

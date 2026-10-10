@@ -1,5 +1,5 @@
 // ============================================================================
-//  JAK 3 EN LIGNE - EVENEMENTS DU MONDE EN LIGNE
+//  JAK 2 EN LIGNE - EVENEMENTS DU MONDE EN LIGNE
 //
 //  Toutes les 6 a 9 minutes, un evenement arrive quelque part pres d'un joueur :
 //    * ALERTE BOSS : un boss geant apparait (3 Jak geants, le ROBO BOSS, le TITAN, la BETE

@@ -1,3 +1,3 @@
 @echo off
 cd /d "%~dp0"
-start "" Jak3Online.exe --createur-sauvegarde
+start "" Jak2Online.exe --createur-sauvegarde

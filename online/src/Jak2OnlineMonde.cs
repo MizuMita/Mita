@@ -1,5 +1,5 @@
 // ============================================================================
-//  JAK 3 EN LIGNE - le MONDE EN LIGNE (session publique facon "GTA en ligne")
+//  JAK 2 EN LIGNE - le MONDE EN LIGNE (session publique facon "GTA en ligne")
 //
 //  * identite de chaque joueur : cle RSA gardee sur son PC (protegee par Windows).
 //    Chaque message important (chat, elimination, profil) est signe : personne ne
@@ -423,7 +423,7 @@ namespace Jak2Online
             Add(56, "Jak 4", KIND_ITEM, 11, 3000, -1, 8);
             Add(57, "Tess", KIND_ITEM, 12, 1500, -1, 3);
             Add(58, "Daxter", KIND_ITEM, 13, 500, -1, 1);
-            // 1.3 : personnages de Jak 3 (bits 23..26)
+            // 1.3 : personnages de Jak 2 (bits 23..26)
             Add(105, "Ashelin", KIND_ITEM, 23, 2500, -1, 8);
             Add(106, "Torn", KIND_ITEM, 24, 2500, -1, 8);
             Add(107, "Sig", KIND_ITEM, 25, 4000, -1, 12);

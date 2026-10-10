@@ -1,6 +1,6 @@
 ﻿// ============================================================================
-//  JAK 3 EN LIGNE - Jak2Online.exe
-//  Programme compagnon du mod "Jak 3 Coop Multiplayer" (OpenGOAL).
+//  JAK 2 EN LIGNE - Jak2Online.exe
+//  Programme compagnon du mod "Jak 2 Coop Multiplayer" (OpenGOAL).
 //
 //  * Mode normal (double-clic)  : fenetre de connexion. Fait le pont entre le
 //    jeu (gk.exe) et le serveur : envoie ta position/animation, recoit celles
@@ -11,7 +11,7 @@
 //  Le jeu ne peut pas utiliser le reseau directement : il echange avec ce
 //  programme par deux fichiers du dossier data/online/bridge (aucun acces a la
 //  memoire du jeu, donc rien de suspect pour les antivirus). Le contenu suit la
-//  structure online-shm de goal_src/jak3/pc/features/online-h.gc : les offsets
+//  structure online-shm de goal_src/jak2/pc/features/online-h.gc : les offsets
 //  ci-dessous (classe Shm) doivent rester identiques a ceux du fichier GOAL.
 //
 //  Compilable avec le compilateur C# 5 fourni avec Windows (voir build.bat).
@@ -3225,7 +3225,7 @@ namespace Jak2Online
                 string dir = SaveDir();
                 Directory.CreateDirectory(dir);
                 // copie de securite de l'emplacement remplace
-                string bak = Path.Combine(dir, "jak3online-copie-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
+                string bak = Path.Combine(dir, "jak2online-copie-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"));
                 for (int b = 0; b < 2; b++)
                 {
                     string f = Path.Combine(dir, "bank" + (SaveSlot * 2 + b) + ".bin");
@@ -3485,7 +3485,7 @@ namespace Jak2Online
                     }
                     else if (!alive)
                     {
-                        GameStatus = T("en attente du jeu (lancez Jak 3 avec le mod)", "waiting for the game (start Jak 3 with the mod)");
+                        GameStatus = T("en attente du jeu (lancez Jak 2 avec le mod)", "waiting for the game (start Jak 2 with the mod)");
                     }
                     gameWasAlive = alive;
                     if (alive && fresh) ProcessGame(g);
@@ -3868,7 +3868,7 @@ namespace Jak2Online
         public MainForm(bool hidden)
         {
             startHidden = hidden;
-            Text = W("Jak 3 En Ligne");
+            Text = W("Jak 2 En Ligne");
             Width = 660;
             Height = 674;
             StartPosition = FormStartPosition.CenterScreen;
@@ -4011,11 +4011,11 @@ namespace Jak2Online
             // icone pres de l'horloge
             tray = new NotifyIcon();
             tray.Icon = Icon != null ? Icon : SystemIcons.Application;
-            tray.Text = W("Jak 3 En Ligne");
+            tray.Text = W("Jak 2 En Ligne");
             tray.Visible = true;
             ContextMenu menu = new ContextMenu();
             menu.MenuItems.Add(W("Ouvrir"), delegate { ShowWindow(); });
-            menu.MenuItems.Add(W("Quitter Jak 3 En Ligne"), delegate { reallyQuit = true; Close(); });
+            menu.MenuItems.Add(W("Quitter Jak 2 En Ligne"), delegate { reallyQuit = true; Close(); });
             tray.ContextMenu = menu;
             tray.DoubleClick += delegate { ShowWindow(); };
 
@@ -4048,7 +4048,7 @@ namespace Jak2Online
                 chkStartup.Checked = true;
                 firstRun = false;
                 SaveIni();
-                tray.ShowBalloonTip(6000, W("Jak 3 En Ligne"), W("Le mode en ligne est actif. Il demarrera tout seul avec Windows : lancez simplement le jeu."), ToolTipIcon.Info);
+                tray.ShowBalloonTip(6000, W("Jak 2 En Ligne"), W("Le mode en ligne est actif. Il demarrera tout seul avec Windows : lancez simplement le jeu."), ToolTipIcon.Info);
             }
 
             uiTimer = new System.Windows.Forms.Timer();
@@ -4310,7 +4310,7 @@ namespace Jak2Online
             try { if (iniPath != null) File.AppendAllText(iniPath, Environment.NewLine + "langue_jeu_init=1" + Environment.NewLine); } catch (Exception) { }
         }
 
-        // premier lancement : raccourci "Jak 3 Online" sur le bureau (une seule fois : s'il est
+        // premier lancement : raccourci "Jak 2 Online" sur le bureau (une seule fois : s'il est
         // supprime, il n'est pas recree)
         void DesktopShortcutOnce()
         {
@@ -4320,7 +4320,7 @@ namespace Jak2Online
                     foreach (string line in File.ReadAllLines(iniPath))
                         if (line.Trim().ToLowerInvariant() == "raccourci=1") return;
                 string desk = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string lnk = Path.Combine(desk, "Jak 3 Online.lnk");
+                string lnk = Path.Combine(desk, "Jak 2 Online.lnk");
                 if (!File.Exists(lnk))
                 {
                     Type t = Type.GetTypeFromProgID("WScript.Shell");
@@ -4329,7 +4329,7 @@ namespace Jak2Online
                     Type st = sc.GetType();
                     st.InvokeMember("TargetPath", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { Application.ExecutablePath });
                     st.InvokeMember("WorkingDirectory", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { Path.GetDirectoryName(Application.ExecutablePath) });
-                    st.InvokeMember("Description", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { "Jak 3 Online : a lancer avant le jeu (reseau, boutique, joueurs)" });
+                    st.InvokeMember("Description", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { "Jak 2 Online : a lancer avant le jeu (reseau, boutique, joueurs)" });
                     st.InvokeMember("IconLocation", System.Reflection.BindingFlags.SetProperty, null, sc, new object[] { Application.ExecutablePath + ",0" });
                     st.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, sc, null);
                 }
@@ -4371,7 +4371,7 @@ namespace Jak2Online
             else
                 sess = W("Session : aucune (creez-en une depuis le menu Start du jeu)");
             lblSession.Text = sess;
-            string tip = client.SessionId != 0 ? "Jak 3 En Ligne - " + client.SessionCode + " (" + client.SessionCount + ")" : "Jak 3 En Ligne - " + (client.NetState >= Shm.NET_LOBBY ? W("connecte") : W("hors ligne"));
+            string tip = client.SessionId != 0 ? "Jak 2 En Ligne - " + client.SessionCode + " (" + client.SessionCount + ")" : "Jak 2 En Ligne - " + (client.NetState >= Shm.NET_LOBBY ? W("connecte") : W("hors ligne"));
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
             if (server != null)
                 lblHost.Text = W("Serveur heberge sur ce PC, port ") + server.Port + " : " + server.PlayerCount + W(" connecte(s). Ouvrez ce port (TCP) sur votre box et donnez votre IP.");
@@ -4402,7 +4402,7 @@ namespace Jak2Online
                 // la croix cache la fenetre : le mode en ligne reste actif
                 e.Cancel = true;
                 Hide();
-                tray.ShowBalloonTip(3000, W("Jak 3 En Ligne"), W("Toujours actif ici. Clic droit > Quitter pour l'arreter."), ToolTipIcon.Info);
+                tray.ShowBalloonTip(3000, W("Jak 2 En Ligne"), W("Toujours actif ici. Clic droit > Quitter pour l'arreter."), ToolTipIcon.Info);
                 return;
             }
             SaveIni();
@@ -6229,7 +6229,7 @@ namespace Jak2Online
             return fails;
         }
 
-        // --jak2swap : Jak 3 -> vrai Jak 2 -> Jak 3 -> Jak 2 -> Keira... (changement de corps en direct)
+        // --jak2swap : Jak 2 -> vrai Jak 2 -> Jak 2 -> Jak 2 -> Keira... (changement de corps en direct)
         public static int Jak2Swap()
         {
             const int port = 27983;
@@ -7384,7 +7384,7 @@ namespace Jak2Online
             Check("sauvegarde de l'hote recue", Wait(() => guest.SaveStatus == 2, wait));
             byte[] got = File.ReadAllBytes(Path.Combine(dir, "bank6.bin"));
             Check("sauvegarde copiee a l'identique (emplacement 4, 2 fichiers)", got[100] == 0xAA && File.ReadAllBytes(Path.Combine(dir, "bank7.bin"))[100] == 0xAA);
-            Check("ancienne sauvegarde mise de cote", Directory.GetDirectories(dir, "jak3online-copie-*").Length >= 1);
+            Check("ancienne sauvegarde mise de cote", Directory.GetDirectories(dir, "jak2online-copie-*").Length >= 1);
             guest.TestSaveSync(true);
             Thread.Sleep(4000);
             File.WriteAllBytes(Path.Combine(dir, "bank0.bin"), FakeBank(6, 0xBB));
@@ -7577,7 +7577,7 @@ namespace Jak2Online
         static string AskPassword(string text)
         {
             Form f = new Form();
-            f.Text = "Jak 3 En Ligne - cle du createur"; f.Width = 460; f.Height = 170;
+            f.Text = "Jak 2 En Ligne - cle du createur"; f.Width = 460; f.Height = 170;
             f.FormBorderStyle = FormBorderStyle.FixedDialog; f.StartPosition = FormStartPosition.CenterScreen; f.MaximizeBox = false; f.MinimizeBox = false;
             Label l = new Label(); l.Text = text; l.Left = 12; l.Top = 10; l.Width = 420; l.Height = 40;
             TextBox t = new TextBox(); t.UseSystemPasswordChar = true; t.Left = 12; t.Top = 55; t.Width = 420;
@@ -7594,7 +7594,7 @@ namespace Jak2Online
             if (args.Length > 0 && args[0] == "--createur-testsauvegarde")
             {
                 AllocConsole();
-                string tf = Path.Combine(Path.GetTempPath(), "j3k-test.j3k");
+                string tf = Path.Combine(Path.GetTempPath(), "j2k-test.j2k");
                 string e1 = Createur.Export(tf, "mot-de-passe-de-test-123");
                 string e2 = e1 == null ? Createur.Import(tf, "mot-de-passe-de-test-123", false) : "-";
                 string e3 = e1 == null ? Createur.Import(tf, "mauvais-mot-de-passe", false) : "-";
@@ -7612,8 +7612,8 @@ namespace Jak2Online
                 {
                     SaveFileDialog d = new SaveFileDialog();
                     d.Title = "Sauvegarde de la cle du createur";
-                    d.FileName = "cle-createur-jak3online.j3k";
-                    d.Filter = "Cle Jak2Online (*.j3k)|*.j3k";
+                    d.FileName = "cle-createur-jak2online.j2k";
+                    d.Filter = "Cle Jak2Online (*.j2k)|*.j2k";
                     if (d.ShowDialog() != DialogResult.OK) return 1;
                     file = d.FileName;
                 }
@@ -7621,7 +7621,7 @@ namespace Jak2Online
                 {
                     OpenFileDialog d = new OpenFileDialog();
                     d.Title = "Restaurer la cle du createur";
-                    d.Filter = "Cle Jak2Online (*.j3k)|*.j3k";
+                    d.Filter = "Cle Jak2Online (*.j2k)|*.j2k";
                     if (d.ShowDialog() != DialogResult.OK) return 1;
                     file = d.FileName;
                 }
@@ -7629,15 +7629,15 @@ namespace Jak2Online
                 if (pw == null) return 1;
                 if (save)
                 {
-                    if (pw.Length < 12) { MessageBox.Show("Mot de passe trop court (12 caracteres minimum).", "Jak 3 En Ligne"); return 1; }
+                    if (pw.Length < 12) { MessageBox.Show("Mot de passe trop court (12 caracteres minimum).", "Jak 2 En Ligne"); return 1; }
                     string pw2 = AskPassword("Retape le mot de passe :");
-                    if (pw2 != pw) { MessageBox.Show("Les deux mots de passe sont differents.", "Jak 3 En Ligne"); return 1; }
+                    if (pw2 != pw) { MessageBox.Show("Les deux mots de passe sont differents.", "Jak 2 En Ligne"); return 1; }
                 }
                 string err;
                 try { err = save ? Createur.Export(file, pw) : Createur.Import(file, pw); }
                 catch (Exception ex) { err = ex.Message; }
                 MessageBox.Show(err ?? (save ? "Cle sauvegardee dans :\n" + file + "\n\nGarde ce fichier ET le mot de passe en lieu sur (cle USB, cloud perso). Ne les donne a personne."
-                                               : "Cle restauree : ce PC est de nouveau le createur."), "Jak 3 En Ligne");
+                                               : "Cle restauree : ce PC est de nouveau le createur."), "Jak 2 En Ligne");
                 return err == null ? 0 : 1;
             }
             if (args.Length > 0 && args[0] == "--createur-init")
@@ -7851,7 +7851,7 @@ namespace Jak2Online
                     Console.ReadLine();
                     return 1;
                 }
-                Console.WriteLine("Serveur Jak 3 En Ligne pret. Port TCP " + port + ". Fermez cette fenetre pour l'arreter.");
+                Console.WriteLine("Serveur Jak 2 En Ligne pret. Port TCP " + port + ". Fermez cette fenetre pour l'arreter.");
                 while (true) Thread.Sleep(1000);
             }
             bool hidden = args.Length > 0 && args[0] == "--tray";

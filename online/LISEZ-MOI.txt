@@ -1,4 +1,4 @@
-﻿JAK 3 EN LIGNE - jusqu'à 100 joueurs par session
+﻿JAK 2 EN LIGNE - jusqu'à 100 joueurs par session
 =================================================
 
 Le jeu est celui d'origine + le mode en ligne (+ un JOUEUR 2 LOCAL si tu veux, voir plus bas).
@@ -22,17 +22,17 @@ jeu en pause comme d'habitude (elles ont besoin de la mémoire de l'image).
 
 DÉMARRAGE (une seule fois)
 --------------------------
-  1. Dans le launcher OpenGOAL : Jak 3 > Jak 3 Online > bouton des reglages
+  1. Dans le launcher OpenGOAL : Jak 2 > Jak 2 Online > bouton des reglages
      du mod > "Ouvrir le dossier" (Open folder).
-  2. Ouvre  data > online  puis double-clique sur  Jak3Online.exe
-     Il cree un raccourci "Jak 3 Online" sur ton BUREAU pour les fois suivantes.
+  2. Ouvre  data > online  puis double-clique sur  Jak2Online.exe
+     Il cree un raccourci "Jak 2 Online" sur ton BUREAU pour les fois suivantes.
   C'est tout. Il se connecte tout seul à internet (serveur GRATUIT, aucun
   compte, aucun port à ouvrir), se range à côté de l'horloge de Windows et
   démarre ensuite automatiquement avec Windows.
   => Les fois suivantes : tu lances juste le mod normalement.
 
   Pourquoi ce petit programme ? Le jeu (gk.exe) n'a aucune fonction internet :
-  Jak3Online.exe fait le lien. Il n'accède pas à la mémoire du jeu (rien de
+  Jak2Online.exe fait le lien. Il n'accède pas à la mémoire du jeu (rien de
   suspect pour les antivirus), il échange deux fichiers dans data\online\bridge.
 
 
@@ -126,7 +126,7 @@ QUI A LES POUVOIRS DE MODÉRATION ?
 ----------------------------------
   - LE MONDE EN LIGNE (session publique) : UNIQUEMENT LE CRÉATEUR DU MOD. C'est vérifié
     par une clé cryptographique qui n'existe que sur le PC du créateur (chiffrée par
-    Windows dans %APPDATA%\Jak3Online\createur.dat). Chaque ordre (téléporter, geler,
+    Windows dans %APPDATA%\Jak2Online\createur.dat). Chaque ordre (téléporter, geler,
     bannir, donner des orbes ou des véhicules, lancer un événement...) est SIGNÉ avec
     cette clé : les autres jeux refusent tout ordre qui n'est pas signé par elle.
     Changer de pseudo ou copier le mod ne donne AUCUN pouvoir.
@@ -338,7 +338,7 @@ LE MONDE EN LIGNE (LA SESSION PUBLIQUE)
     pas de codes de triche, pas de Dark Jak invincible.
   - Le monde en ligne n'est JAMAIS sauvegardé dans tes emplacements : ta partie solo
     n'est pas touchée. Ton profil en ligne (orbes, niveau, achats) est gardé à part,
-    chiffré par Windows : %APPDATA%\Jak3Online\profil.dat
+    chiffré par Windows : %APPDATA%\Jak2Online\profil.dat
 
 
 JOUEUR 2 LOCAL (2e fenêtre, 2e manette : comme un écran partagé)
@@ -399,12 +399,12 @@ OPTIONS (fenêtre du programme : double-clic sur l'icône près de l'horloge)
 EN CAS DE PROBLÈME
 ------------------
   - Le menu dit "MODE EN LIGNE PAS ENCORE ACTIVÉ" : double-clique sur
-    data\online\Jak3Online.exe (il doit rester dans ce dossier).
-  - Antivirus (Avast, AVG...) : s'il bloque Jak3Online.exe, ajoute une exception
+    data\online\Jak2Online.exe (il doit rester dans ce dossier).
+  - Antivirus (Avast, AVG...) : s'il bloque Jak2Online.exe, ajoute une exception
     pour le dossier data\online.
   - Tout le monde doit avoir la MÊME version du mod.
-  - Journal du programme : data\online\Jak3Online.log (utile pour signaler un problème).
-  - Tests intégrés : Jak3Online.exe --selftest / --stress / --relaytest / --e2e / --mondetest
+  - Journal du programme : data\online\Jak2Online.log (utile pour signaler un problème).
+  - Tests intégrés : Jak2Online.exe --selftest / --stress / --relaytest / --e2e / --mondetest
     (bancs à deux jeux : --final, --partout, --coop, --maisons, --maj12b, --maj12e,
     --j2local, --maj13b, --coll ; un seul jeu : --maj13, --events13)
   - Recompiler le programme : src\build.bat

@@ -1,5 +1,5 @@
 // ============================================================================
-//  JAK 3 EN LIGNE - ANTI-TRICHE / PROTECTION DE LA SESSION PUBLIQUE
+//  JAK 2 EN LIGNE - ANTI-TRICHE / PROTECTION DE LA SESSION PUBLIQUE
 //
 //  * Empreinte de la version : chaque joueur calcule une empreinte (SHA-256) de TOUT
 //    le code du mod (goal_src) et de Jak2Online.exe. Elle est envoyee, signee, avec
@@ -61,7 +61,7 @@ namespace Jak2Online
         {
             try
             {
-                string root = Path.Combine(DataDir(), "goal_src", "jak3");
+                string root = Path.Combine(DataDir(), "goal_src", "jak2");
                 List<string> files = new List<string>();
                 if (Directory.Exists(root)) files.AddRange(Directory.GetFiles(root, "*.gc", SearchOption.AllDirectories));
                 string gd = Path.Combine(root, "dgos", "game.gd");
