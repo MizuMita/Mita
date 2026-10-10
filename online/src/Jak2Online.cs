@@ -2474,6 +2474,14 @@ namespace Jak2Online
             lock (lk) { localState = st; localStateTime = DateTime.UtcNow; }
         }
 
+        // meme etat (sans le ping, octets 60-61, que l'expediteur met a jour a chaque envoi)
+        static bool SameState(byte[] a, byte[] b)
+        {
+            for (int i = 0; i < Proto.StateSize; i++)
+                if (i != 60 && i != 61 && a[i] != b[i]) return false;
+            return true;
+        }
+
         public byte[] LocalPoseSnapshot()
         {
             lock (lk)
@@ -2576,6 +2584,12 @@ namespace Jak2Online
         byte[] localState = new byte[Proto.StateSize];
         DateTime localStateTime = DateTime.MinValue;
         byte[] localPose;
+        // pose choisie par le pont sur la grille de capture du jeu (une capture sur 2, 3 ou 4) :
+        // toujours le meme ecart de mouvement entre deux poses envoyees (plus d'acces de vitesse)
+        byte[] posePending;
+        uint lastPoseLseq;
+        // donnees recues (etat ou pose) : game-in.bin reecrit au prochain tour du pont
+        volatile bool netArrived;
         DateTime localPoseTime = DateTime.MinValue;
         uint poseCounter = 1;
         public int PosesSent, PosesReceived;
@@ -2813,8 +2827,19 @@ namespace Jak2Online
                     lastPing = now;
                     c.Send(new PacketWriter(Proto.C_PING).U32((uint)Environment.TickCount).ToArray());
                 }
-                if (SessionId != 0 && (now - lastPose).TotalMilliseconds >= (SessionCount > 12 ? 110 : SessionCount > 6 ? 85 : 66))
+                if (UseBridge)
                 {
+                    byte[] pp = Interlocked.Exchange(ref posePending, null);
+                    if (pp != null && SessionId != 0)
+                    {
+                        lastPose = now;
+                        c.Send(new PacketWriter(Proto.C_POSE).Bytes(pp, 0, pp.Length).ToArray());
+                        PosesSent++;
+                    }
+                }
+                else if (SessionId != 0 && (now - lastPose).TotalMilliseconds >= (SessionCount > 12 ? 110 : SessionCount > 6 ? 85 : 66))
+                {
+                    // bots et tests sans jeu : comme avant
                     byte[] ps = LocalPoseSnapshot();
                     if (ps != null)
                     {
@@ -2988,9 +3013,15 @@ namespace Jak2Online
                                     rm.Id = id;
                                     remotes[id] = rm;
                                 }
-                                Buffer.BlockCopy(st, 0, rm.State, 0, Proto.StateSize);
-                                CheckRemoteState(id, st);
-                                rm.Seq++;
+                                // le serveur renvoie le dernier etat connu a chaque tour : une copie
+                                // identique n'est PAS une nouvelle donnee (sinon l'avatar recule)
+                                if (rm.Seq == 0 || !SameState(st, rm.State))
+                                {
+                                    Buffer.BlockCopy(st, 0, rm.State, 0, Proto.StateSize);
+                                    CheckRemoteState(id, st);
+                                    rm.Seq++;
+                                    netArrived = true;
+                                }
                                 rm.Last = now;
                                 if (rm.Slot < 0)
                                 {
@@ -3017,6 +3048,7 @@ namespace Jak2Online
                             rm.PoseSeq = ++poseCounter;
                             rm.PoseT = DateTime.UtcNow;
                             PosesReceived++;
+                            netArrived = true;
                         }
                         break;
                     }
@@ -3493,8 +3525,9 @@ namespace Jak2Online
                     KeyboardTick(kbm == 1);
                     ChatKeyboardTick(kbm);
                     GameKeysTick(alive);
-                    if (tick % 2 == 0)
+                    if (tick % 2 == 0 || netArrived)
                     {
+                        netArrived = false;
                         WriteImage(g, tick, alive);
                         bridge.Commit();
                     }
@@ -3557,6 +3590,15 @@ namespace Jak2Online
                     localStateTime = now;
                     localPose = pose;
                     localPoseTime = now;
+                }
+                if (pose != null && SessionId != 0)
+                {
+                    uint stepN = (uint)(SessionCount > 12 ? 4 : SessionCount > 6 ? 3 : 2);
+                    if (lseq - lastPoseLseq >= stepN || lseq < lastPoseLseq)
+                    {
+                        lastPoseLseq = lseq;
+                        Interlocked.Exchange(ref posePending, pose);
+                    }
                 }
             }
 
@@ -7754,12 +7796,25 @@ namespace Jak2Online
         }
 
         [DllImport("winmm.dll")] static extern uint timeBeginPeriod(uint ms);
+        [StructLayout(LayoutKind.Sequential)] struct PowerThrottling { public uint Version, ControlMask, StateMask; }
+        [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+        [DllImport("kernel32.dll")] static extern bool SetProcessInformation(IntPtr h, int infoClass, ref PowerThrottling info, int size);
 
         [STAThread]
         static int Main(string[] args)
         {
             // minuteur Windows a 1 ms (sinon les Sleep sont arrondis a ~16 ms : etats envoyes en retard et par a-coups)
             try { timeBeginPeriod(1); } catch (Exception) { }
+            // Windows 11 ignore ce reglage pour une fenetre cachee (a cote de l'horloge) ou recouverte
+            // par le jeu, sauf si on le demande : ProcessPowerThrottling (4), EXECUTION_SPEED (1) et
+            // IGNORE_TIMER_RESOLUTION (4) desactives
+            try
+            {
+                PowerThrottling pt = new PowerThrottling();
+                pt.Version = 1; pt.ControlMask = 0x1 | 0x4; pt.StateMask = 0;
+                SetProcessInformation(GetCurrentProcess(), 4, ref pt, Marshal.SizeOf(typeof(PowerThrottling)));
+            }
+            catch (Exception) { }
             if (args.Length > 0 && args[0] == "--createur-testsauvegarde")
             {
                 AllocConsole();

@@ -805,15 +805,30 @@
 ;; jak 2 : le jeu ne compte pas les ennemis tues ; on les compte ici (recompense en orbes)
 (define *ow-enemies-killed* 0.0)
 
+(defun ow-coop-enemy-shared? ((proc process))
+  "mort d'ennemi partageable entre les joueurs : ennemi pose sur la carte, proprietaire de son
+   entite, et HOSTILE. Jamais un allie (bot : Kid, Kor, Sig, Ashelin, Jinx/Grim/Mog...), un passant
+   (civilian) ou un garde de la circulation : chacun a SA copie de ces PNJ, la mort de l'un ne doit
+   pas faire disparaitre l'autre."
+  (and proc
+       (type? proc enemy)
+       (-> proc entity)
+       (= proc (-> proc entity extra process))
+       (not (logtest? (-> proc mask) (process-mask bot civilian guard)))
+       )
+  )
+
 (defun ow-coop-hook ((sorte int) (aid uint) (proc process))
-  (if (and (= sorte 2) (not *ow-coop-applying*))
+  (if (and (= sorte 2) (not *ow-coop-applying*) proc
+           (not (logtest? (-> proc mask) (process-mask bot)))
+           )
       (+! *ow-enemies-killed* 1.0)
       )
   (when (and (not *ow-coop-applying*) (nonzero? aid) (ow-coop-on?))
     (case sorte
       ((1)
        ;; seulement les objets a ramasser, les caisses et les ennemis (pas les portes, declencheurs...)
-       (if (and proc (or (type? proc collectable) (type? proc crate) (type? proc enemy)))
+       (if (and proc (or (type? proc collectable) (type? proc crate) (ow-coop-enemy-shared? proc)))
            (begin
              (online-push-out-event! ONLINE_EVENT_COOP aid 0.0 1 (the-as vector #f))
              (+! *ow-coop-sent* 1)
@@ -821,8 +836,10 @@
            )
        )
       ((2)
-       (online-push-out-event! ONLINE_EVENT_COOP aid 0.0 sorte (the-as vector #f))
-       (+! *ow-coop-sent* 1)
+       (when (ow-coop-enemy-shared? proc)
+         (online-push-out-event! ONLINE_EVENT_COOP aid 0.0 sorte (the-as vector #f))
+         (+! *ow-coop-sent* 1)
+         )
        )
       ((3)
        (when (ow-coop-tasks?)
@@ -848,24 +865,34 @@
     ((1 2)
      (let ((e (entity-by-aid aid)))
        (when (and e (type? e entity-actor) (nonzero? (-> (the-as entity-actor e) extra)))
-         (let ((p (-> (the-as entity-actor e) extra process)))
+         (let ((p (-> (the-as entity-actor e) extra process))
+               (ok #t)
+               )
            (cond
              ((not p)
+              ;; pas cree chez moi : seul un objet fini (sorte 1) compte
+              (if (!= sorte 1) (set! ok #f))
               )
              ((type? p enemy)
-              (if (not (focus-test? (the-as process-focusable p) dead))
-                  (send-event p 'die-fast)
-                  )
+              (cond
+                ((not (ow-coop-enemy-shared? p))
+                 ;; allie escorte, passant ou garde : chacun garde le sien
+                 (set! ok #f)
+                 )
+                ((not (focus-test? (the-as process-focusable p) dead))
+                 (send-event p 'die-fast)
+                 )
+                )
               )
              ((or (type? p collectable) (type? p crate))
               (deactivate p)
               )
              )
+           ;; objet fini pour de bon : il ne reviendra pas au prochain chargement de la zone
+           (if (and ok (= sorte 1))
+               (logior! (-> (the-as entity-actor e) extra perm status) (entity-perm-status dead))
+               )
            )
-         ;; objet fini pour de bon : il ne reviendra pas au prochain chargement de la zone
-         (if (= sorte 1)
-             (logior! (-> (the-as entity-actor e) extra perm status) (entity-perm-status dead))
-             )
          )
        )
      )
@@ -893,7 +920,7 @@
 (define *ow-test-bd* 0.0)
 
 (defun ow-test-pick! ((p process))
-  (when (and *target* (or (type? p crate) (type? p enemy)) (-> p entity) (= p (-> p entity extra process))
+  (when (and *target* (or (and (type? p crate) (-> p entity) (= p (-> p entity extra process))) (ow-coop-enemy-shared? p))
              (not (focus-test? (the-as process-focusable p) dead)))
     (let ((d (vector-vector-distance (-> (the-as process-drawable p) root trans) (-> *target* control trans))))
       (when (< d *ow-test-bd*)
@@ -2462,7 +2489,8 @@
                    (not (logtest? (-> rs flags) ONLINE_FLAG_DEAD))
                    )
           (let ((p (online-puppet-proc i)))
-            (set! found (if (and p (-> p placed)) (-> p root trans) (-> rs pos)))
+            ;; la ou son vehicule a ete AFFICHE (apres les poses), pas une position intermediaire
+            (set! found (if (and p (-> p placed)) (-> p draw-pos) (-> rs pos)))
             )
           )
         )
@@ -2537,7 +2565,7 @@
 
 (defun ow-ride-driver-quat ((id uint))
   (let ((p (ow-ride-driver-proc id)))
-    (if p (-> p root quat) (the-as quaternion #f))
+    (if p (-> p draw-quat) (the-as quaternion #f))
     )
   )
 
