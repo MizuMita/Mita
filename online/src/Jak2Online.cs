@@ -3895,12 +3895,14 @@ namespace Jak2Online
         Client client = new Client();
         Server server;
         TextBox txtName, txtServer, txtCode, txtChat;
-        ComboBox cboMode, cboLang;
+        ComboBox cboLang;
+        RadioButton rbNet, rbHost, rbJoin;
+        Label lblSessDetail, lblGamePath, lblCodeBig;
+        Button btnCopyCode, btnWorld, btnPrivate, btnLeave, btnJoin;
         CheckBox chkStartup;
         Button btnConnect;
         Label lblGame, lblServer, lblSession, lblHost, lblServerCaption;
         ListBox lstLog, lstPlayers;
-        NotifyIcon tray;
         System.Windows.Forms.Timer uiTimer;
         readonly Queue<string> pendingLog = new Queue<string>();
         string iniPath;
@@ -3908,7 +3910,6 @@ namespace Jak2Online
         bool firstRun = true;
         string bridgeOverride;
         bool startHidden;
-        bool reallyQuit;
 
         const int MODE_INTERNET = 0, MODE_HOST = 1, MODE_CUSTOM = 2;
 
@@ -3916,150 +3917,172 @@ namespace Jak2Online
         {
             startHidden = hidden;
             Text = W("Jak 2 En Ligne");
-            Width = 660;
-            Height = 712;
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Segoe UI", 9f);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
             iniPath = Path.Combine(Path.GetDirectoryName(Application.ExecutablePath), "Jak2Online.ini");
 
-            int y = 12;
-            AddLabel(W("Pseudo :"), 12, y + 3);
+            // ------------------------------------------------------------------
+            // mise en page : bandeau d'etat en haut, 3 etapes a gauche (connexion,
+            // session, jouer), joueurs / chat / journal a droite
+            // ------------------------------------------------------------------
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
+            ClientSize = new Size(784, 640);
+            BackColor = Color.FromArgb(244, 246, 249);
+            Color band = Color.FromArgb(28, 36, 48);
+            Font small = new Font("Segoe UI", 8.25f);
+
+            Panel head = new Panel();
+            head.SetBounds(0, 0, 784, 72);
+            head.BackColor = band;
+            Controls.Add(head);
+            Label title = new Label();
+            title.Text = W("JAK 2 EN LIGNE");
+            title.ForeColor = Color.White;
+            title.Font = new Font("Segoe UI", 16f, FontStyle.Bold);
+            title.AutoSize = true;
+            title.Location = new Point(14, 8);
+            head.Controls.Add(title);
+            lblServer = HeadChip(head, 18, 46);
+            lblGame = HeadChip(head, 280, 46);
+            lblSession = HeadChip(head, 530, 46);
+
+            // ---- 1. connexion
+            GroupBox gb1 = Card(W("1.  Connexion"), 14, 84, 404, 214);
+            CardLabel(gb1, W("Pseudo :"), 12, 28);
             txtName = new TextBox();
-            txtName.SetBounds(160, y, 190, 23);
+            txtName.SetBounds(84, 25, 130, 23);
             txtName.MaxLength = 15;
             txtName.Leave += delegate { ApplyName(); };
             txtName.KeyDown += delegate (object o, KeyEventArgs ke) { if (ke.KeyCode == Keys.Enter) { ApplyName(); ke.SuppressKeyPress = true; } };
-            Controls.Add(txtName);
+            gb1.Controls.Add(txtName);
             cboLang = new ComboBox();
             cboLang.DropDownStyle = ComboBoxStyle.DropDownList;
             cboLang.Items.Add(W("Langue : automatique"));
-            cboLang.Items.Add("Francais");
+            cboLang.Items.Add("Français");
             cboLang.Items.Add("English");
-            cboLang.SetBounds(370, y, 120, 23);
-            Controls.Add(cboLang);
-            y += 32;
-            AddLabel(W("Connexion :"), 12, y + 3);
-            cboMode = new ComboBox();
-            cboMode.DropDownStyle = ComboBoxStyle.DropDownList;
-            cboMode.Items.Add(W("Internet gratuit (automatique)"));
-            cboMode.Items.Add(W("Heberger mon propre serveur (IP)"));
-            cboMode.Items.Add(W("Rejoindre un serveur perso (IP)"));
-            cboMode.SetBounds(160, y, 330, 23);
-            cboMode.SelectedIndexChanged += delegate { UpdateModeUi(); };
-            Controls.Add(cboMode);
-            y += 32;
-            lblServerCaption = AddLabel(W("Adresse du serveur :"), 12, y + 3);
+            cboLang.SetBounds(222, 25, 170, 23);
+            gb1.Controls.Add(cboLang);
+            rbNet = ModeRadio(gb1, W("Internet gratuit"), W("rien à configurer, le plus simple"), 58);
+            rbHost = ModeRadio(gb1, W("Héberger sur ce PC"), W("tes amis rejoignent ton IP"), 82);
+            rbJoin = ModeRadio(gb1, W("Rejoindre l'IP d'un ami"), W("son PC héberge la partie"), 106);
+            lblServerCaption = CardLabel(gb1, W("Adresse du serveur :"), 12, 143);
             txtServer = new TextBox();
-            txtServer.SetBounds(160, y, 190, 23);
-            Controls.Add(txtServer);
+            txtServer.SetBounds(140, 140, 132, 23);
+            gb1.Controls.Add(txtServer);
             btnConnect = new Button();
-            btnConnect.SetBounds(370, y - 1, 120, 26);
+            btnConnect.SetBounds(280, 137, 112, 30);
             btnConnect.Click += delegate { ToggleConnect(); };
-            Controls.Add(btnConnect);
-            y += 32;
-            chkStartup = new CheckBox();
-            chkStartup.Text = W("Demarrer avec Windows (discret, a cote de l'horloge) : plus rien a lancer ensuite");
-            chkStartup.SetBounds(12, y, 620, 24);
-            chkStartup.CheckedChanged += delegate { SetStartup(chkStartup.Checked); SaveIni(); };
-            Controls.Add(chkStartup);
-            y += 32;
+            gb1.Controls.Add(btnConnect);
+            lblHost = new Label();
+            lblHost.SetBounds(12, 172, 380, 34);
+            lblHost.Font = small;
+            lblHost.ForeColor = Color.FromArgb(90, 98, 110);
+            gb1.Controls.Add(lblHost);
 
-            lblGame = AddLabel(W("Jeu : ") + "-", 12, y); y += 22;
-            lblServer = AddLabel(W("Reseau : ") + "-", 12, y); y += 22;
-            lblSession = AddLabel(W("Session : -"), 12, y); y += 22;
-            lblHost = AddLabel("", 12, y); y += 28;
-
-            AddLabel(W("Rejoindre avec un code :"), 12, y + 3);
+            // ---- 2. session
+            GroupBox gb2 = Card(W("2.  Session"), 14, 306, 404, 150);
+            lblCodeBig = new Label();
+            lblCodeBig.SetBounds(10, 22, 118, 34);
+            lblCodeBig.Font = new Font("Consolas", 17f, FontStyle.Bold);
+            lblCodeBig.ForeColor = Color.FromArgb(28, 36, 48);
+            lblCodeBig.Visible = false;
+            gb2.Controls.Add(lblCodeBig);
+            new ToolTip().SetToolTip(lblCodeBig, W("Code a donner a tes amis"));
+            lblSessDetail = new Label();
+            lblSessDetail.SetBounds(12, 24, 380, 36);
+            gb2.Controls.Add(lblSessDetail);
+            btnCopyCode = new Button();
+            btnCopyCode.Text = W("Copier");
+            btnCopyCode.SetBounds(330, 24, 62, 28);
+            btnCopyCode.Click += delegate
+            {
+                try { if (client.SessionCode.Length > 0) { Clipboard.SetText(client.SessionCode); QueueLog(W("Code copié : ") + client.SessionCode); } } catch (Exception) { }
+            };
+            gb2.Controls.Add(btnCopyCode);
+            btnWorld = new Button();
+            btnWorld.Text = W("Monde public");
+            btnWorld.SetBounds(12, 64, 122, 32);
+            btnWorld.Click += delegate { client.UiJoinWorld(); };
+            gb2.Controls.Add(btnWorld);
+            new ToolTip().SetToolTip(btnWorld, W("La grande partie ouverte à tout le monde (sans code)"));
+            btnPrivate = new Button();
+            btnPrivate.Text = W("Partie privée");
+            btnPrivate.SetBounds(140, 64, 122, 32);
+            btnPrivate.Click += delegate { client.UiCreate(false, 8, true); };
+            gb2.Controls.Add(btnPrivate);
+            new ToolTip().SetToolTip(btnPrivate, W("Crée une partie avec un code à donner à tes amis (8 joueurs, PvP)"));
+            btnLeave = new Button();
+            btnLeave.Text = W("Quitter la session");
+            btnLeave.SetBounds(268, 64, 124, 32);
+            btnLeave.Click += delegate { client.UiLeave(); };
+            gb2.Controls.Add(btnLeave);
+            CardLabel(gb2, W("Code d'un ami :"), 12, 112);
             txtCode = new TextBox();
-            txtCode.SetBounds(160, y, 90, 23);
+            txtCode.SetBounds(116, 109, 90, 23);
             txtCode.CharacterCasing = CharacterCasing.Upper;
             txtCode.MaxLength = 6;
-            Controls.Add(txtCode);
-            Button btnJoin = new Button();
+            txtCode.KeyDown += delegate (object o, KeyEventArgs ke) { if (ke.KeyCode == Keys.Enter) { JoinWithCode(); ke.SuppressKeyPress = true; } };
+            gb2.Controls.Add(txtCode);
+            btnJoin = new Button();
             btnJoin.Text = W("Rejoindre");
-            btnJoin.SetBounds(260, y - 1, 90, 26);
-            btnJoin.Click += delegate { if (txtCode.Text.Trim().Length > 0) client.UiJoinCode(txtCode.Text); };
-            Controls.Add(btnJoin);
-            Button btnWorld = new Button();
-            btnWorld.Text = W("Session publique");
-            btnWorld.SetBounds(358, y - 1, 135, 26);
-            btnWorld.Click += delegate { client.UiJoinWorld(); };
-            Controls.Add(btnWorld);
-            Button btnBot = new Button();
-            btnBotUi = btnBot;
-            btnBot.Visible = false;
-            btnBot.Text = W("+ Bot de test");
-            btnBot.SetBounds(500, y - 1, 120, 26);
-            btnBot.Click += delegate { client.AddBot(); };
-            Controls.Add(btnBot);
-            Button btnLeave = new Button();
-            btnLeave.Text = W("Quitter la session");
-            btnLeave.SetBounds(500, y - 1, 130, 26);
-            btnLeave.Click += delegate { client.UiLeave(); };
-            Controls.Add(btnLeave);
-            y += 34;
-            // session privee + lancement du jeu directement depuis cette fenetre
-            Button btnPrivate = new Button();
-            btnPrivate.Text = W("Creer une session privee (code)");
-            btnPrivate.SetBounds(12, y - 1, 238, 30);
-            btnPrivate.Click += delegate { client.UiCreate(false, 8, true); };
-            Controls.Add(btnPrivate);
+            btnJoin.SetBounds(212, 106, 100, 29);
+            btnJoin.Click += delegate { JoinWithCode(); };
+            gb2.Controls.Add(btnJoin);
+
+            // ---- 3. jouer
+            GroupBox gb3 = Card(W("3.  Jouer"), 14, 464, 404, 142);
             btnPlay = new Button();
-            btnPlay.Text = W("JOUER A JAK 2");
-            btnPlay.Font = new Font(Font, FontStyle.Bold);
-            btnPlay.SetBounds(260, y - 1, 330, 30);
+            btnPlay.SetBounds(12, 24, 336, 46);
+            btnPlay.FlatStyle = FlatStyle.Flat;
+            btnPlay.FlatAppearance.BorderSize = 0;
+            btnPlay.ForeColor = Color.White;
+            btnPlay.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
             btnPlay.Click += delegate { LaunchGame(); };
-            Controls.Add(btnPlay);
+            gb3.Controls.Add(btnPlay);
             btnPickGame = new Button();
             btnPickGame.Text = "...";
-            btnPickGame.SetBounds(596, y - 1, 34, 30);
+            btnPickGame.SetBounds(354, 24, 38, 46);
             btnPickGame.Click += delegate { PickGame(); };
-            Controls.Add(btnPickGame);
+            gb3.Controls.Add(btnPickGame);
             new ToolTip().SetToolTip(btnPickGame, W("Choisir le jeu (gk.exe du mod Jak 2 Online)"));
-            btnBot.SetBounds(510, y - 1, 120, 30);
-            y += 38;
+            lblGamePath = new Label();
+            lblGamePath.SetBounds(12, 74, 380, 18);
+            lblGamePath.Font = small;
+            lblGamePath.ForeColor = Color.FromArgb(90, 98, 110);
+            gb3.Controls.Add(lblGamePath);
             // joueur 2 local : 2e fenetre du jeu avec une 2e manette (comme un ecran partage)
             btnJ2 = new Button();
-            btnJ2.SetBounds(12, y - 1, 260, 26);
+            btnJ2.SetBounds(12, 100, 168, 28);
             btnJ2.Click += delegate { client.LocalJ2Request(2); };
-            Controls.Add(btnJ2);
-            AddLabel(W("Manette J2 :"), 282, y + 3);
+            gb3.Controls.Add(btnJ2);
             cboPad = new ComboBox();
             cboPad.DropDownStyle = ComboBoxStyle.DropDownList;
             cboPad.Items.Add(W("Automatique"));
             for (int k = 1; k <= 4; k++) cboPad.Items.Add(W("Manette ") + k);
             cboPad.SelectedIndex = 0;
-            cboPad.SetBounds(370, y, 110, 23);
+            cboPad.SetBounds(186, 103, 104, 23);
             cboPad.SelectedIndexChanged += delegate { LocalJ2.PadWanted = cboPad.SelectedIndex - 1; };
-            Controls.Add(cboPad);
+            gb3.Controls.Add(cboPad);
+            new ToolTip().SetToolTip(cboPad, W("Manette J2 :"));
             CheckBox chkSide = new CheckBox();
-            chkSide.Text = W("Cote a cote");
+            chkSide.Text = W("Côte à côte");
             chkSide.Checked = true;
-            chkSide.SetBounds(492, y, 140, 24);
+            chkSide.SetBounds(298, 103, 100, 24);
             chkSide.CheckedChanged += delegate { LocalJ2.SideBySide = chkSide.Checked; };
-            Controls.Add(chkSide);
-            y += 34;
+            gb3.Controls.Add(chkSide);
 
-            AddLabel(W("Joueurs de la session :"), 12, y);
-            AddLabel(W("Journal :"), 310, y);
-            y += 20;
+            // ---- a droite : joueurs, chat, journal
+            SideLabel(W("Joueurs"), 434, 86);
             lstPlayers = new ListBox();
-            lstPlayers.SetBounds(12, y, 290, 170);
-            lstPlayers.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom;
+            lstPlayers.SetBounds(434, 106, 336, 150);
+            lstPlayers.IntegralHeight = false;
             Controls.Add(lstPlayers);
-            lstLog = new ListBox();
-            lstLog.SetBounds(310, y, 320, 170);
-            lstLog.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-            lstLog.HorizontalScrollbar = true;
-            Controls.Add(lstLog);
-            y += 180;
-            Label lblChat = AddLabel(W("Chat :"), 12, y + 3);
-            lblChat.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
+            SideLabel(W("Chat"), 434, 266);
             txtChat = new TextBox();
-            txtChat.SetBounds(60, y, 470, 23);
+            txtChat.SetBounds(434, 286, 254, 23);
             txtChat.MaxLength = 80;
-            txtChat.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
             txtChat.KeyDown += delegate (object o, KeyEventArgs ke)
             {
                 if (ke.KeyCode == Keys.Enter) { client.SendChat(txtChat.Text); txtChat.Text = ""; ke.SuppressKeyPress = true; }
@@ -4067,24 +4090,42 @@ namespace Jak2Online
             Controls.Add(txtChat);
             Button btnChat = new Button();
             btnChat.Text = W("Envoyer");
-            btnChat.SetBounds(540, y - 1, 90, 26);
-            btnChat.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
+            btnChat.SetBounds(694, 284, 76, 27);
             btnChat.Click += delegate { client.SendChat(txtChat.Text); txtChat.Text = ""; };
             Controls.Add(btnChat);
-            y += 32;
-            Label help = AddLabel(W("Dans le jeu : T = chat, TAB (ou SELECT) = menu des joueurs, Start puis SELECT = page EN LIGNE. Fermer = rester actif."), 12, y);
-            help.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
+            SideLabel(W("Journal"), 434, 320);
+            lstLog = new ListBox();
+            lstLog.SetBounds(434, 340, 336, 230);
+            lstLog.IntegralHeight = false;
+            lstLog.HorizontalScrollbar = true;
+            lstLog.Font = small;
+            Controls.Add(lstLog);
+            chkStartup = new CheckBox();
+            chkStartup.Text = W("Lancer avec Windows (fenêtre réduite)");
+            chkStartup.SetBounds(434, 578, 336, 24);
+            chkStartup.CheckedChanged += delegate { SetStartup(chkStartup.Checked); SaveIni(); };
+            Controls.Add(chkStartup);
+            Button btnBot = new Button();
+            btnBotUi = btnBot;
+            btnBot.Visible = false;
+            btnBot.Text = W("+ Bot de test");
+            btnBot.SetBounds(690, 82, 80, 22);
+            btnBot.Click += delegate { client.AddBot(); };
+            Controls.Add(btnBot);
+            Label help = new Label();
+            help.Text = W("En jeu : T = chat   -   TAB (ou SELECT) = joueurs   -   Start puis SELECT = page EN LIGNE");
+            help.SetBounds(14, 614, 756, 18);
+            help.Font = small;
+            help.ForeColor = Color.FromArgb(90, 98, 110);
+            Controls.Add(help);
 
-            // icone pres de l'horloge
-            tray = new NotifyIcon();
-            tray.Icon = Icon != null ? Icon : SystemIcons.Application;
-            tray.Text = W("Jak 2 En Ligne");
-            tray.Visible = true;
-            ContextMenu menu = new ContextMenu();
-            menu.MenuItems.Add(W("Ouvrir"), delegate { ShowWindow(); });
-            menu.MenuItems.Add(W("Quitter Jak 2 En Ligne"), delegate { reallyQuit = true; Close(); });
-            tray.ContextMenu = menu;
-            tray.DoubleClick += delegate { ShowWindow(); };
+            // les cadres ont un titre en gras : leur contenu reste en police normale
+            Font normal = new Font("Segoe UI", 9f);
+            foreach (GroupBox g in new GroupBox[] { gb1, gb2, gb3 })
+                foreach (Control c in g.Controls)
+                    if (c.Font.Bold && c != btnPlay && c != lblCodeBig) c.Font = normal;
+            if (startHidden) WindowState = FormWindowState.Minimized;
+
 
             LoadIni();
             DesktopShortcutOnce();
@@ -4110,19 +4151,17 @@ namespace Jak2Online
                 try { Directory.CreateDirectory(br); } catch (Exception) { }
                 client.BridgeDir = br;
             }
-            QueueLog(gameDir != null ? W("Jeu trouve : ") + gameDir : W("Jeu introuvable : bouton ... a cote de JOUER pour choisir gk.exe"));
+            QueueLog(gameDir != null ? W("Jeu trouvé : ") + gameDir : W("Jeu introuvable : clique sur ... pour choisir gk.exe"));
             QueueLog(W("Dossier d'echange avec le jeu : ") + client.BridgeDir);
             client.Start();
             UpdateModeUi();
 
             if (firstRun)
             {
-                // premiere fois : on active le demarrage avec Windows pour que tout soit automatique ensuite
-                chkStartup.Checked = true;
                 firstRun = false;
                 SaveIni();
-                tray.ShowBalloonTip(6000, W("Jak 2 En Ligne"), W("Le mode en ligne est actif. Il demarrera tout seul avec Windows : lancez simplement le jeu."), ToolTipIcon.Info);
             }
+            StartupCleanupOnce();
 
             uiTimer = new System.Windows.Forms.Timer();
             uiTimer.Interval = 250;
@@ -4130,17 +4169,6 @@ namespace Jak2Online
             uiTimer.Start();
 
             if (autoConnect) ToggleConnect();
-        }
-
-        protected override void SetVisibleCore(bool value)
-        {
-            if (startHidden)
-            {
-                startHidden = false;
-                if (!IsHandleCreated) CreateHandle();
-                value = false;
-            }
-            base.SetVisibleCore(value);
         }
 
         public void ShowFromOtherInstance() { ShowWindow(); }
@@ -4160,6 +4188,93 @@ namespace Jak2Online
             l.Location = new Point(x, y);
             Controls.Add(l);
             return l;
+        }
+
+        Label HeadChip(Panel head, int x, int y)
+        {
+            Label l = new Label();
+            l.SetBounds(x, y, 246, 20);
+            l.ForeColor = Color.FromArgb(170, 178, 190);
+            l.BackColor = head.BackColor;
+            head.Controls.Add(l);
+            return l;
+        }
+
+        // 0 = gris (rien), 1 = orange (en cours / pret), 2 = vert (ok)
+        void SetChip(Label l, int state, string text)
+        {
+            string t = "\u25CF  " + text;
+            if (l.Text != t) l.Text = t;
+            l.ForeColor = state == 2 ? Color.FromArgb(110, 220, 140) : state == 1 ? Color.FromArgb(240, 190, 90) : Color.FromArgb(170, 178, 190);
+        }
+
+        GroupBox Card(string title, int x, int y, int w, int h)
+        {
+            GroupBox g = new GroupBox();
+            g.Text = title;
+            g.SetBounds(x, y, w, h);
+            g.Font = new Font("Segoe UI", 9.75f, FontStyle.Bold);
+            g.BackColor = Color.White;
+            Controls.Add(g);
+            return g;
+        }
+
+        Label CardLabel(GroupBox g, string text, int x, int y)
+        {
+            Label l = new Label();
+            l.Text = text;
+            l.AutoSize = true;
+            l.Font = new Font("Segoe UI", 9f);
+            l.Location = new Point(x, y);
+            g.Controls.Add(l);
+            return l;
+        }
+
+        RadioButton ModeRadio(GroupBox g, string title, string hint, int y)
+        {
+            RadioButton r = new RadioButton();
+            r.Text = title + "   (" + hint + ")";
+            r.Font = new Font("Segoe UI", 9f);
+            r.SetBounds(12, y, 384, 22);
+            r.CheckedChanged += delegate { if (r.Checked) UpdateModeUi(); };
+            g.Controls.Add(r);
+            return r;
+        }
+
+        void SideLabel(string text, int x, int y)
+        {
+            Label l = AddLabel(text, x, y);
+            l.Font = new Font("Segoe UI", 9.75f, FontStyle.Bold);
+        }
+
+        void JoinWithCode()
+        {
+            if (txtCode.Text.Trim().Length > 0) client.UiJoinCode(txtCode.Text.Trim());
+        }
+
+        int Mode
+        {
+            get { return rbHost.Checked ? MODE_HOST : rbJoin.Checked ? MODE_CUSTOM : MODE_INTERNET; }
+            set { if (value == MODE_HOST) rbHost.Checked = true; else if (value == MODE_CUSTOM) rbJoin.Checked = true; else rbNet.Checked = true; }
+        }
+
+        // les anciennes versions activaient le demarrage avec Windows d'office : on le retire une fois
+        void StartupCleanupOnce()
+        {
+            try
+            {
+                if (iniPath != null && File.Exists(iniPath))
+                    foreach (string line in File.ReadAllLines(iniPath))
+                        if (line.Trim().ToLowerInvariant() == "demarrage_v2=1") return;
+                if (IsStartupEnabled())
+                {
+                    SetStartup(false);
+                    chkStartup.Checked = false;
+                    QueueLog(W("Démarrage avec Windows désactivé (recochable en bas à droite)."));
+                }
+                if (iniPath != null) File.AppendAllText(iniPath, Environment.NewLine + "demarrage_v2=1" + Environment.NewLine);
+            }
+            catch (Exception) { }
         }
 
         void QueueLog(string s)
@@ -4343,11 +4458,11 @@ namespace Jak2Online
 
         void UpdateModeUi()
         {
-            bool custom = cboMode.SelectedIndex == MODE_CUSTOM;
-            bool host = cboMode.SelectedIndex == MODE_HOST;
+            bool custom = Mode == MODE_CUSTOM;
+            bool host = Mode == MODE_HOST;
             txtServer.Visible = custom || host;
             lblServerCaption.Visible = custom || host;
-            lblServerCaption.Text = host ? W("Port a ouvrir :") : W("Adresse du serveur :");
+            lblServerCaption.Text = host ? W("Port à ouvrir :") : W("Adresse du serveur :");
             if (host && txtServer.Text.IndexOf(':') < 0 && txtServer.Text.Trim().Length == 0) txtServer.Text = Proto.DefaultPort.ToString();
         }
 
@@ -4381,7 +4496,7 @@ namespace Jak2Online
             catch (Exception) { }
             txtName.Text = Proto.CleanName(name);
             txtServer.Text = srv;
-            cboMode.SelectedIndex = Math.Max(0, Math.Min(2, mode));
+            Mode = Math.Max(0, Math.Min(2, mode));
             cboLang.SelectedIndex = lang;
             client.WantedName = txtName.Text;
             chkStartup.Checked = IsStartupEnabled();
@@ -4393,7 +4508,7 @@ namespace Jak2Online
             {
                 List<string> lines = new List<string>();
                 lines.Add("pseudo=" + txtName.Text.Trim());
-                lines.Add("mode=" + cboMode.SelectedIndex);
+                lines.Add("mode=" + Mode);
                 lines.Add("serveur=" + txtServer.Text.Trim());
                 lines.Add("langue=" + (cboLang.SelectedIndex == 1 ? "fr" : cboLang.SelectedIndex == 2 ? "en" : "auto"));
                 lines.Add("auto=" + (autoConnect ? "1" : "0"));
@@ -4404,7 +4519,7 @@ namespace Jak2Online
                     foreach (string old in File.ReadAllLines(iniPath))
                     {
                         string t = old.Trim().ToLowerInvariant();
-                        if ((t == "langue_jeu_init=1" || t == "raccourci=1") && !lines.Contains(t)) lines.Add(t);
+                        if ((t == "langue_jeu_init=1" || t == "raccourci=1" || t == "demarrage_v2=1") && !lines.Contains(t)) lines.Add(t);
                     }
                 File.WriteAllLines(iniPath, lines.ToArray());
             }
@@ -4429,7 +4544,7 @@ namespace Jak2Online
             {
                 using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey))
                 {
-                    if (on) k.SetValue("Jak2Online", "\"" + Application.ExecutablePath + "\" --tray");
+                    if (on) k.SetValue("Jak2Online", "\"" + Application.ExecutablePath + "\" --reduit");
                     else if (k.GetValue("Jak2Online") != null) k.DeleteValue("Jak2Online");
                 }
             }
@@ -4449,7 +4564,7 @@ namespace Jak2Online
             autoConnect = true;
             client.WantedName = Proto.CleanName(txtName.Text);
             client.French = French; client.LangForce = LangForce;
-            int mode = cboMode.SelectedIndex;
+            int mode = Mode;
             client.UseRelay = mode == MODE_INTERNET;
             if (mode == MODE_HOST)
             {
@@ -4548,15 +4663,18 @@ namespace Jak2Online
 
         void RefreshUi()
         {
+            bool connected = client.NetState >= Shm.NET_LOBBY;
+            bool inSession = client.SessionId != 0;
+            bool game = client.GameAttached;
             if (btnBotUi != null) btnBotUi.Visible = client.IsCreateur;
-            if (btnPlay != null)
-            {
-                btnPlay.Width = client.IsCreateur ? 200 : 330;
-                if (btnPickGame != null) btnPickGame.Left = client.IsCreateur ? 466 : 596;
-                btnPlay.Text = client.GameAttached ? W("Jeu lance") : W("JOUER A JAK 2");
-                btnPlay.Enabled = !client.GameAttached;
-            }
-            if (btnJ2 != null) btnJ2.Text = client.LocalJ2Running ? W("Arreter le joueur 2 local") : W("+ Joueur 2 local (2e manette)");
+            // 3. jouer
+            string pt = game ? W("Jeu lancé") : "\u25B6  " + W("JOUER À JAK 2");
+            if (btnPlay.Text != pt) btnPlay.Text = pt;
+            btnPlay.Enabled = !game;
+            btnPlay.BackColor = game ? Color.FromArgb(150, 160, 170) : Color.FromArgb(46, 158, 79);
+            string gp = gameDir != null ? W("Jeu : ") + gameDir : W("Jeu introuvable : clique sur ... pour choisir gk.exe");
+            if (lblGamePath.Text != gp) lblGamePath.Text = gp;
+            btnJ2.Text = client.LocalJ2Running ? W("Arrêter le joueur 2 local") : W("+ Joueur 2 local");
             LangFirstRun();
             lock (pendingLog)
             {
@@ -4568,29 +4686,53 @@ namespace Jak2Online
                 }
             }
             client.French = French; client.LangForce = LangForce;
-            btnConnect.Text = client.WantConnected ? W("Deconnecter") : W("Se connecter");
-            txtServer.Enabled = !client.WantConnected;
-            cboMode.Enabled = !client.WantConnected;
-            lblGame.Text = W("Jeu : ") + client.GameStatus + (client.GameAttached ? "  (" + client.GameFps + " img/s)" : "");
-            lblServer.Text = W("Reseau : ") + client.Status + (client.NetState >= Shm.NET_LOBBY ? "  (ping " + client.PingMs + " ms)" : "")
-                + (client.IsCreateur ? W("   -   CREATEUR (cle verifiee)") : "");
-            string sess;
-            if (client.SessionId != 0)
-                sess = W("Session ") + (client.SessionPublic ? W("PUBLIQUE") : W("PRIVEE")) + W("  -  CODE : ") + client.SessionCode
-                    + "  -  " + client.SessionCount + "/" + client.SessionMax + W(" joueurs  -  PvP ") + (client.SessionPvp ? W("oui") : W("non"))
-                    + (client.HostId == client.MyId ? W("  -  vous etes l'hote") : "")
-                    + (client.InWorld && client.Prof != null ? W("  -  niveau ") + client.Prof.Level + ", " + client.TestMoney + W(" orbes") : "");
+            // 1. connexion
+            btnConnect.Text = client.WantConnected ? W("Déconnecter") : W("Se connecter");
+            bool free = !client.WantConnected;
+            rbNet.Enabled = free; rbHost.Enabled = free; rbJoin.Enabled = free;
+            txtServer.Enabled = free;
+            // bandeau
+            SetChip(lblServer, connected ? 2 : client.WantConnected ? 1 : 0, W("Réseau : ")
+                + (connected ? W("connecté") + "   " + client.PingMs + " ms" : client.WantConnected ? W("connexion...") : W("hors ligne")));
+            SetChip(lblGame, game ? 2 : gameDir != null ? 1 : 0, W("Jeu : ")
+                + (game ? W("lancé") + "   " + client.GameFps + W(" img/s") : gameDir != null ? W("prêt à lancer") : W("introuvable")));
+            SetChip(lblSession, inSession ? 2 : 0, W("Session : ")
+                + (inSession ? (client.SessionPublic ? W("publique") : W("privée")) + "   " + client.SessionCount + "/" + client.SessionMax : W("aucune")));
+            // 2. session
+            string sd;
+            bool showCode = inSession && client.SessionCode.Length > 0;
+            if (lblCodeBig.Text != client.SessionCode) lblCodeBig.Text = client.SessionCode;
+            lblCodeBig.Visible = showCode;
+            if (showCode) lblSessDetail.SetBounds(132, 24, 196, 36); else lblSessDetail.SetBounds(12, 24, 380, 36);
+            if (inSession)
+                sd = (client.SessionPublic ? W("Partie PUBLIQUE") : W("Partie PRIVÉE"))
+                    + (client.HostId == client.MyId ? W(" (tu es l'hôte)") : "")
+                    + "\n" + client.SessionCount + "/" + client.SessionMax + W(" joueurs  -  PvP ") + (client.SessionPvp ? W("oui") : W("non"))
+                    + (client.InWorld && client.Prof != null ? W("   -   niveau ") + client.Prof.Level + ", " + client.TestMoney + W(" orbes") : "");
+            else if (connected)
+                sd = W("Choisis le monde public, crée une partie privée\nou entre le code d'un ami.");
             else
-                sess = W("Session : aucune (Session publique, Creer une session privee ou Rejoindre ci-dessous)");
-            lblSession.Text = sess;
-            string tip = client.SessionId != 0 ? "Jak 2 En Ligne - " + client.SessionCode + " (" + client.SessionCount + ")" : "Jak 2 En Ligne - " + (client.NetState >= Shm.NET_LOBBY ? W("connecte") : W("hors ligne"));
-            tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
+                sd = W("Connecte-toi d'abord (étape 1).");
+            if (lblSessDetail.Text != sd) lblSessDetail.Text = sd;
+            btnCopyCode.Visible = inSession && client.SessionCode.Length > 0;
+            btnWorld.Enabled = connected && !inSession;
+            btnPrivate.Enabled = connected && !inSession;
+            btnJoin.Enabled = connected && !inSession;
+            txtCode.Enabled = connected && !inSession;
+            btnLeave.Enabled = inSession;
+            // titre (barre des taches)
+            string tt = W("Jak 2 En Ligne") + (inSession ? "   -   " + client.SessionCode + " (" + client.SessionCount + ")" : "");
+            if (Text != tt) Text = tt;
+            string hs;
             if (server != null)
-                lblHost.Text = W("Serveur heberge sur ce PC, port ") + server.Port + " : " + server.PlayerCount + W(" connecte(s). Ouvrez ce port (TCP) sur votre box et donnez votre IP.");
-            else if (client.UseRelay && client.NetState >= Shm.NET_LOBBY)
-                lblHost.Text = W("Relais internet gratuit : ") + client.RelayName + W(" (aucun port a ouvrir).");
+                hs = W("Serveur sur ce PC, port ") + server.Port + " : " + server.PlayerCount + W(" connecté(s). Ouvre ce port (TCP) sur ta box et donne ton IP publique à tes amis.");
+            else if (client.UseRelay && connected)
+                hs = W("Relais internet gratuit : ") + client.RelayName + W(" (aucun port à ouvrir).");
+            else if (client.WantConnected && !connected)
+                hs = client.Status;
             else
-                lblHost.Text = "";
+                hs = "";
+            if (lblHost.Text != hs) lblHost.Text = hs;
 
             if (!Visible) return;
             List<PlayerEntry> pl = client.PlayersSnapshot();
@@ -4599,7 +4741,7 @@ namespace Jak2Online
             foreach (PlayerEntry e in pl)
             {
                 string s = e.Name;
-                if ((e.Flags & Proto.PFLAG_HOST) != 0) s += W(" (hote)");
+                if ((e.Flags & Proto.PFLAG_HOST) != 0) s += W(" (hôte)");
                 if ((e.Flags & Proto.PFLAG_ME) != 0) s += W(" (vous)");
                 s += "  " + (e.Level.Length > 0 ? e.Level : "-") + "  PV " + (int)e.Health + "  " + e.Ping + " ms";
                 lstPlayers.Items.Add(s);
@@ -4609,16 +4751,18 @@ namespace Jak2Online
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            if (!reallyQuit && e.CloseReason == CloseReason.UserClosing)
+            // la croix QUITTE le programme (plus d'icone cachee pres de l'horloge) ; si le jeu est en
+            // ligne, on demande d'abord : le fermer coupe la connexion du jeu
+            if (e.CloseReason == CloseReason.UserClosing && client.GameAttached && client.SessionId != 0)
             {
-                // la croix cache la fenetre : le mode en ligne reste actif
-                e.Cancel = true;
-                Hide();
-                tray.ShowBalloonTip(3000, W("Jak 2 En Ligne"), W("Toujours actif ici. Clic droit > Quitter pour l'arreter."), ToolTipIcon.Info);
-                return;
+                if (MessageBox.Show(this, W("Tu es en ligne : fermer ce programme coupe la connexion du jeu. Fermer quand même ?"),
+                        W("Jak 2 En Ligne"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
             }
             SaveIni();
-            tray.Visible = false;
             client.StopLocalJ2();
             client.Stop();
             if (server != null) server.Stop();
@@ -8089,7 +8233,8 @@ namespace Jak2Online
                 Console.WriteLine("Serveur Jak 2 En Ligne pret. Port TCP " + port + ". Fermez cette fenetre pour l'arreter.");
                 while (true) Thread.Sleep(1000);
             }
-            bool hidden = args.Length > 0 && args[0] == "--tray";
+            // lance avec Windows : fenetre reduite dans la barre des taches (--tray : anciennes versions)
+            bool hidden = args.Length > 0 && (args[0] == "--reduit" || args[0] == "--tray");
             bool created;
             Mutex single = new Mutex(true, "Jak2Online-Compagnon", out created);
             EventWaitHandle showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Jak2Online-Afficher");
